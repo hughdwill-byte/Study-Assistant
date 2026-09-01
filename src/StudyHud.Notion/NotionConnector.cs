@@ -237,38 +237,3 @@ public sealed class NotionConnector : INoteSource
         return JsonSerializer.Deserialize<JsonElement>(json);
     }
 }
-
-/// <summary>
-/// Windows Credential Manager implementation of ICredentialStore (spec §46).
-/// Uses DPAPI-backed Windows Credential Manager. Token never written to logs or files.
-/// </summary>
-public sealed class WindowsCredentialStore : ICredentialStore
-{
-    private readonly ILogger<WindowsCredentialStore> _logger;
-
-    public WindowsCredentialStore(ILogger<WindowsCredentialStore> logger)
-    {
-        _logger = logger;
-    }
-
-    public Task StoreAsync(string key, string secret, CancellationToken ct = default)
-    {
-        // Windows Credential Manager via CredWrite
-        // Simplified: uses a local encrypted file with DPAPI until full WCM integration
-        // In production, this must use CredWrite/CredRead P/Invoke or a WCM wrapper library
-        _logger.LogDebug("Credential stored for key '{Key}'.", key);
-        return Task.CompletedTask;
-    }
-
-    public Task<string?> RetrieveAsync(string key, CancellationToken ct = default)
-    {
-        _logger.LogDebug("Credential retrieved for key '{Key}'.", key);
-        return Task.FromResult<string?>(null);
-    }
-
-    public Task DeleteAsync(string key, CancellationToken ct = default)
-    {
-        _logger.LogDebug("Credential deleted for key '{Key}'.", key);
-        return Task.CompletedTask;
-    }
-}

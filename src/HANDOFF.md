@@ -150,8 +150,8 @@ and blocked nothing (§41, §182). The sync is one-way; the policy never writes 
 | `StudyHud.Capture` | `CaptureService`, `CaptureOverlayWindow` |
 | `StudyHud.Ocr` | `WindowsOcrService`, `OcrNormaliser` |
 | `StudyHud.Search` | `FeatureExtractor`, `LocalSearchIndex` |
-| `StudyHud.Storage` | `DatabaseMigrator`, SQLite schema, `JsonSettingsStore`, `LayoutService` |
-| `StudyHud.Notion` | `NotionConnector`, `WindowsCredentialStore` |
+| `StudyHud.Storage` | `DatabaseMigrator`, SQLite schema, `JsonSettingsStore`, `LayoutService`, `DpapiCredentialStore` |
+| `StudyHud.Notion` | `NotionConnector`, `NotionBlockParser` |
 | `StudyHud.Theming` | `ThemeService`, `ThemeTokenSet` |
 | `StudyHud.App` | DI wiring, `App.xaml.cs`, `MainWindow` |
 
@@ -317,10 +317,12 @@ dotnet run --project StudyHud.App/StudyHud.App.csproj
 
 ## Known Limitations / TODOs
 
-- `WindowsCredentialStore` uses a stub — replace with real CredWrite/CredRead P/Invoke
-  or the `CredentialManagement` NuGet package before Phase 7.
-- `NotionConnector.SyncCourseInternalAsync` is scaffolded — full block traversal and
-  image download pipeline are Phase 7 work.
+- Credential storage is now `DpapiCredentialStore` (DPAPI per-user, encrypted at rest). A
+  Credential-Manager (CredWrite/CredRead) backend could replace it later but is not required.
+- Notion sync needs two things to go live: a **Notion token entry field** in the settings window
+  (calls `NotionConnector.StoreTokenAsync`), and the **course → `notion_root_page_id` mapping**
+  (the connector currently treats the courseId as the Notion page id). The block traversal, image
+  download, and indexing are done.
 - `WindowsOcrService` uses reflection to call WinRT — replace with direct SDK calls
   using `Microsoft.Windows.CsWinRT` in Phase 8.
 - Interactive island HWNDs (RevealTab, ControlCapsule) are architecturally planned but

@@ -199,7 +199,9 @@ public partial class App : Application
                 services.AddSingleton<WorkspaceCoordinator>();
 
                 // ── Notion ───────────────────────────────────────────────────
-                services.AddSingleton<ICredentialStore, WindowsCredentialStore>();
+                services.AddSingleton<ICredentialStore>(sp => new DpapiCredentialStore(
+                    Path.Combine(GetAppDataDir(), "creds"),
+                    sp.GetRequiredService<ILogger<DpapiCredentialStore>>()));
                 services.AddSingleton<INoteSource, NotionConnector>();
 
                 // ── Theming ──────────────────────────────────────────────────
