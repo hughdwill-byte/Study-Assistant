@@ -152,7 +152,8 @@ public partial class App : Application
                     sp.GetRequiredService<IMonitorService>(),
                     sp.GetRequiredService<IApplicationStateService>(),
                     sp.GetRequiredService<IThemeService>(),
-                    sp.GetRequiredService<ISearchIndex>(),
+                    sp.GetRequiredService<ICaptureService>(),
+                    sp.GetRequiredService<IQuestionFinder>(),
                     sp.GetRequiredService<IAssessmentPolicyService>(),
                     sp.GetRequiredService<ILogger<OverlayManager>>()));
 
@@ -179,6 +180,9 @@ public partial class App : Application
 
                 // ── Indexing pipeline (OCR → normalise → index, spec §50) ────
                 services.AddSingleton<INoteIndexer, NoteIndexer>();
+
+                // ── Question Finder runtime (capture → OCR → search, spec §38) ─
+                services.AddSingleton<IQuestionFinder, QuestionFinder>();
 
                 // ── Settings + layout persistence (spec §19, §71) ────────────
                 services.AddSingleton<ISettingsStore>(sp =>

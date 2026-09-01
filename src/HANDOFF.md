@@ -228,6 +228,14 @@ content (spec §47), flag low-confidence/failed OCR for the library UI (§59, §
 batch through `ISearchIndex`. Local + non-generative throughout. A Notion sync (Phase 7) will
 produce the `RawNoteSource`s that feed this.
 
+**Question Finder runtime (`IQuestionFinder` → `QuestionFinder`)**: the query-time pipeline (§38, §54)
+— local OCR of the captured region → `FeatureExtractor` → `ISearchIndex.SearchAsync` → ranked
+results with explanations, plus the detected text/confidence so the UI can offer correction (§59).
+It never answers the question and has no remote/generative code path. `QuestionFinderPanel` now calls
+`ICaptureService.CaptureRegionAsync` → `IQuestionFinder.FindFromImageAsync` (replacing the old
+placeholder), threaded through `OverlayManager` → `PanelHost`. Course scoping in the panel is still
+a placeholder until the library populates real course ids (Phase 7).
+
 ---
 
 ## Assessment Mode Compliance (spec §41, §89, §182)

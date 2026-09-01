@@ -14,7 +14,8 @@ namespace StudyHud.Overlay.Controls;
 public sealed class QuestionFinderPanel : HudPanelBase
 {
     private readonly IApplicationStateService _appState;
-    private readonly ISearchIndex _searchIndex;
+    private readonly ICaptureService _capture;
+    private readonly IQuestionFinder _finder;
     private Grid _preCapture = null!;
     private Grid _postCapture = null!;
     private ComboBox _courseCombo = null!;
@@ -24,11 +25,13 @@ public sealed class QuestionFinderPanel : HudPanelBase
     public QuestionFinderPanel(
         IApplicationStateService appState,
         IThemeService theme,
-        ISearchIndex searchIndex)
+        ICaptureService capture,
+        IQuestionFinder finder)
         : base("question-finder-panel", appState, theme)
     {
         _appState = appState;
-        _searchIndex = searchIndex;
+        _capture = capture;
+        _finder = finder;
         MinWidth = 200;
         MinHeight = 120;
         Width = 320;
@@ -159,35 +162,46 @@ public sealed class QuestionFinderPanel : HudPanelBase
 
     private async void OnDrawQuestion(object sender, RoutedEventArgs e)
     {
-        // Phase 10 will wire this to the full CaptureService → OCR → Search pipeline.
-        // For Phase 2 we show the flow works end-to-end with a placeholder.
-        SetStatus("Drawing region… (capture + OCR in Phase 10)");
+        try
+        {
+            SetStatus("Draw a rectangle around the question…");
 
-        await Task.Delay(500); // Simulate async work
-
-        // Show placeholder results
-        ShowResults([
-            new SearchResult
+            var capture = await _capture.CaptureRegionAsync();
+            if (capture is null || capture.WasCancelled || capture.ImageBytes.Length == 0)
             {
-                NoteItemId = "demo-1",
-                CourseId = "eng-maths",
-                CourseName = "Engineering Mathematics",
-                WeekLabel = "Week 6",
-                PageName = "Bending and Flexure",
-                HeadingPath = "Flexure Formula",
-                NotionPageUrl = "https://notion.so",
-                NotionBlockId = null,
-                MatchScore = 92,
-                Explanations =
-                [
-                    new MatchExplanation { Type = MatchType.Variable, Value = "M" },
-                    new MatchExplanation { Type = MatchType.Variable, Value = "I" },
-                    new MatchExplanation { Type = MatchType.Word, Value = "bending" },
-                    new MatchExplanation { Type = MatchType.Word, Value = "stress" }
-                ]
+                SetStatus("Capture cancelled.");
+                return;
             }
-        ]);
+
+            SetStatus("Reading question (local OCR)…");
+            var result = await _finder.FindFromImageAsync(capture.ImageBytes, SelectedCourseId());
+
+            ShowResults(result.Results);
+
+            // Surface low-confidence OCR so the user can see what was detected (spec §59).
+            if (result.IsLowConfidence)
+                SetStatus($"Low OCR confidence — detected: “{Truncate(result.OcrText, 80)}”");
+            else if (result.Results.Count == 0)
+                SetStatus(string.IsNullOrWhiteSpace(result.OcrText)
+                    ? "No text detected — try recapturing."
+                    : $"No matches for: “{Truncate(result.OcrText, 80)}”");
+        }
+        catch (Exception ex)
+        {
+            SetStatus("Question Finder error: " + ex.Message);
+        }
     }
+
+    /// <summary>
+    /// The course id to scope the search to, or null for all courses. The selector currently holds
+    /// placeholder display names; real course ids populate it once the library is synced (Phase 7),
+    /// so for now we always search across all indexed notes rather than filter on a name that would
+    /// never match a stored course id.
+    /// </summary>
+    private string? SelectedCourseId() => null;
+
+    private static string Truncate(string s, int max)
+        => string.IsNullOrEmpty(s) || s.Length <= max ? s : s[..max] + "…";
 
     private void ShowResults(IReadOnlyList<SearchResult> results)
     {

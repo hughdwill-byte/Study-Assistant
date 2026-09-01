@@ -15,7 +15,8 @@ public sealed class OverlayManager : IDisposable
     private readonly IMonitorService _monitors;
     private readonly IApplicationStateService _appState;
     private readonly IThemeService _theme;
-    private readonly ISearchIndex _searchIndex;
+    private readonly ICaptureService _capture;
+    private readonly IQuestionFinder _finder;
     private readonly IAssessmentPolicyService _policy;
     private readonly ILogger<OverlayManager> _logger;
     private readonly Dictionary<string, MonitorOverlayWindow> _overlays = new();
@@ -25,14 +26,16 @@ public sealed class OverlayManager : IDisposable
         IMonitorService monitors,
         IApplicationStateService appState,
         IThemeService theme,
-        ISearchIndex searchIndex,
+        ICaptureService capture,
+        IQuestionFinder finder,
         IAssessmentPolicyService policy,
         ILogger<OverlayManager> logger)
     {
         _monitors = monitors;
         _appState = appState;
         _theme = theme;
-        _searchIndex = searchIndex;
+        _capture = capture;
+        _finder = finder;
         _policy = policy;
         _logger = logger;
 
@@ -58,7 +61,7 @@ public sealed class OverlayManager : IDisposable
         var overlay = new MonitorOverlayWindow(monitor, _appState, _logger);
 
         // Create a PanelHost and attach it to the overlay
-        var host = new PanelHost(monitor, _appState, _theme, _searchIndex, _policy);
+        var host = new PanelHost(monitor, _appState, _theme, _capture, _finder, _policy);
         overlay.SetPanelHost(host);
 
         _overlays[monitor.MonitorId] = overlay;
