@@ -6,6 +6,8 @@ using StudyHud.Core.Services;
 using StudyHud.Search;
 using StudyHud.Storage;
 using Xunit;
+// Disambiguate from System.IO.MatchType (pulled in by `using System.IO`).
+using MatchType = StudyHud.Core.Services.MatchType;
 
 namespace StudyHud.Tests;
 
