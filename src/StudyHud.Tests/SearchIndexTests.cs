@@ -146,8 +146,9 @@ public sealed class SearchIndexTests : IAsyncLifetime, IDisposable
         });
 
         (await _index.GetIndexedCountAsync(CourseId)).Should().Be(2, "re-indexing replaces, not duplicates");
-        // "flexure"/"formula" were unique to the old content and must be gone from the index.
-        var stale = await _index.SearchAsync(Query("flexure formula"));
+        // "maximum" was unique to the OLD OCR text (not in the new text, the heading, or the page
+        // name, all of which FTS also indexes), so it proves the old full-text row was removed.
+        var stale = await _index.SearchAsync(Query("maximum"));
         stale.Should().NotContain(r => r.NoteItemId == "flexure",
             "the replaced item's old full-text row must be removed");
         var fresh = await _index.SearchAsync(Query("torsion shear"));
