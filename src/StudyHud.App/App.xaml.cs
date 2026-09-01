@@ -177,6 +177,9 @@ public partial class App : Application
                         services.BuildServiceProvider()
                             .GetRequiredService<ILogger<LocalSearchIndex>>()));
 
+                // ── Indexing pipeline (OCR → normalise → index, spec §50) ────
+                services.AddSingleton<INoteIndexer, NoteIndexer>();
+
                 // ── Settings + layout persistence (spec §19, §71) ────────────
                 services.AddSingleton<ISettingsStore>(sp =>
                     new JsonSettingsStore(

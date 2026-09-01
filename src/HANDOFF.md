@@ -222,6 +222,12 @@ Note: `DatabaseMigrator` and the index writer drive transactions with raw `BEGIN
 explicit `command.Transaction = tx`, because Microsoft.Data.Sqlite rejects a command executed under
 an active `SqliteTransaction` it is not associated with.
 
+**Pre-indexing pipeline (`INoteIndexer` → `NoteIndexer`)**: turns `RawNoteSource`s (image bytes or
+text blocks) into indexed items — OCR once via `IOcrService`, hash the source to skip unchanged
+content (spec §47), flag low-confidence/failed OCR for the library UI (§59, §60), and write the
+batch through `ISearchIndex`. Local + non-generative throughout. A Notion sync (Phase 7) will
+produce the `RawNoteSource`s that feed this.
+
 ---
 
 ## Assessment Mode Compliance (spec §41, §89, §182)
