@@ -200,6 +200,7 @@ public partial class App : Application
 
                 // ── Windows ──────────────────────────────────────────────────
                 services.AddTransient<MainWindow>();
+                services.AddTransient<SettingsView>();
             })
             .Build();
     }

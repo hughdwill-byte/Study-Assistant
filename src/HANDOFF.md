@@ -300,8 +300,11 @@ dotnet run --project StudyHud.App/StudyHud.App.csproj
 - Named/saved layouts (spec §21, e.g. "Lecture", "Dual Monitor Study") are not yet exposed in the
   UI. `ILayoutService` already supports arbitrary layout ids; `WorkspaceCoordinator` currently uses
   one auto-layout per workspace (`workspace-<Workspace>`). A layout manager UI is the next step.
-- The settings window does not yet edit `StudyHudSettings` (trigger, hotkeys, theme, exclusions,
-  workspace→profile map). The store + model exist; the editor UI is Phase 2/12 work.
+- The settings window now has a `SettingsView` editor for the common `StudyHudSettings` fields
+  (theme, Hold-to-Interact trigger, snap distance, control-capsule, exclusions, battery/fullscreen,
+  auto-switch profile, assessment-startup). Save applies theme + Hold-to-Interact live. Still not
+  surfaced in the UI: per-hotkey rebinding for panic/edit, and the workspace→macro-profile map
+  (the model supports both).
 - DPI handling in `CaptureOverlayWindow.WpfToPhysical` uses primary monitor scale as
   an approximation — needs per-monitor DPI at the capture point (Phase 6).
 

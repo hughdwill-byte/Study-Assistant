@@ -78,6 +78,7 @@
                                FontSize="10" Opacity="0.5"
                                Foreground="{DynamicResource SecondaryText}"/>
 
+                    <Button Content="Home" Margin="8,2" Click="OnShowHome"/>
                     <Button Content="Workspaces" Margin="8,2"
                             Click="OnSwitchWorkspaceNoteTaking"/>
                     <Button Content="Courses" Margin="8,2"/>
@@ -97,31 +98,33 @@
 
                     <Button Content="Assessment Mode" Margin="8,2"
                             Click="OnToggleAssessmentMode"/>
-                    <Button Content="Themes" Margin="8,2"/>
-                    <Button Content="Settings" Margin="8,2"/>
+                    <Button Content="Themes" Margin="8,2" Click="OnShowSettings"/>
+                    <Button Content="Settings" Margin="8,2" Click="OnShowSettings"/>
                 </StackPanel>
             </Border>
 
-            <!-- Main panel (tabs / pages rendered here) -->
+            <!-- Main panel (pages rendered here) -->
             <Border Grid.Column="1" Padding="20">
-                <StackPanel>
-                    <TextBlock Text="Welcome to Study HUD"
-                               FontSize="{DynamicResource TitleFontSize}"
-                               FontFamily="{DynamicResource TitleFontFamily}"
-                               Margin="0,0,0,12"/>
+                <ContentControl x:Name="PageHost">
+                    <StackPanel x:Name="HomeView">
+                        <TextBlock Text="Welcome to Study HUD"
+                                   FontSize="{DynamicResource TitleFontSize}"
+                                   FontFamily="{DynamicResource TitleFontFamily}"
+                                   Margin="0,0,0,12"/>
 
-                    <TextBlock TextWrapping="Wrap" Opacity="0.7"
-                               Text="Use the sidebar to configure workspaces, courses, macros, layouts, and your Notion library. The HUD runs in the background — this window manages settings only."/>
+                        <TextBlock TextWrapping="Wrap" Opacity="0.7"
+                                   Text="Use the sidebar to configure workspaces, courses, macros, layouts, and your Notion library. The HUD runs in the background — this window manages settings only."/>
 
-                    <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
-                        <Button Content="Note Taking" Margin="0,0,8,0"
-                                Click="OnSwitchWorkspaceNoteTaking"/>
-                        <Button Content="Question Finder"
-                                Click="OnSwitchWorkspaceQuestionFinder"/>
-                        <Button Content="Toggle HUD" Margin="8,0,0,0"
-                                Click="OnToggleHudVisibility"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
+                            <Button Content="Note Taking" Margin="0,0,8,0"
+                                    Click="OnSwitchWorkspaceNoteTaking"/>
+                            <Button Content="Question Finder"
+                                    Click="OnSwitchWorkspaceQuestionFinder"/>
+                            <Button Content="Toggle HUD" Margin="8,0,0,0"
+                                    Click="OnToggleHudVisibility"/>
+                        </StackPanel>
                     </StackPanel>
-                </StackPanel>
+                </ContentControl>
             </Border>
         </Grid>
 

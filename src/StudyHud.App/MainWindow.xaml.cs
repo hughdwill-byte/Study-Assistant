@@ -69,6 +69,20 @@ public partial class MainWindow : Window
         _logger.LogDebug("Settings window hidden (HUD still running).");
     }
 
+    // Navigation
+    private SettingsView? _settingsView;
+
+    private void OnShowSettings(object sender, RoutedEventArgs e)
+    {
+        _settingsView ??= _services.GetRequiredService<SettingsView>();
+        PageHost.Content = _settingsView;
+    }
+
+    private void OnShowHome(object sender, RoutedEventArgs e)
+    {
+        PageHost.Content = HomeView;
+    }
+
     // Commands
     private async void OnSwitchWorkspaceNoteTaking(object sender, RoutedEventArgs e)
         => await _appState.SwitchWorkspaceAsync(WorkspaceId.NoteTaking);
