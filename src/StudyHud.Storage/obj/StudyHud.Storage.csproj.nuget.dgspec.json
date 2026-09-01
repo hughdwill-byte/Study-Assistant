@@ -1,0 +1,160 @@
+{
+  "format": 1,
+  "restore": {
+    "C:\\Users\\hugh.williams\\OneDrive - Peninsula Grammar\\Desktop\\Desktop\\Study-Assistant\\src\\StudyHud.Storage\\StudyHud.Storage.csproj": {}
+  },
+  "projects": {
+    "C:\\Users\\hugh.williams\\OneDrive - Peninsula Grammar\\Desktop\\Desktop\\Study-Assistant\\src\\StudyHud.Core\\StudyHud.Core.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "C:\\Users\\hugh.williams\\OneDrive - Peninsula Grammar\\Desktop\\Desktop\\Study-Assistant\\src\\StudyHud.Core\\StudyHud.Core.csproj",
+        "projectName": "StudyHud.Core",
+        "projectPath": "C:\\Users\\hugh.williams\\OneDrive - Peninsula Grammar\\Desktop\\Desktop\\Study-Assistant\\src\\StudyHud.Core\\StudyHud.Core.csproj",
+        "packagesPath": "C:\\Users\\hugh.williams\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\hugh.williams\\OneDrive - Peninsula Grammar\\Desktop\\Desktop\\Study-Assistant\\src\\StudyHud.Core\\obj\\",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "C:\\Users\\hugh.williams\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0-windows"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0-windows7.0": {
+            "targetAlias": "net8.0-windows",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0-windows7.0": {
+          "targetAlias": "net8.0-windows",
+          "dependencies": {
+            "Microsoft.Extensions.DependencyInjection.Abstractions": {
+              "target": "Package",
+              "version": "[8.0.0, )"
+            },
+            "Microsoft.Extensions.Logging.Abstractions": {
+              "target": "Package",
+              "version": "[8.0.0, )"
+            },
+            "Microsoft.Extensions.Options": {
+              "target": "Package",
+              "version": "[8.0.0, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Users\\hugh.williams\\dotnet\\dotnet\\sdk\\8.0.424/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "C:\\Users\\hugh.williams\\OneDrive - Peninsula Grammar\\Desktop\\Desktop\\Study-Assistant\\src\\StudyHud.Storage\\StudyHud.Storage.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "C:\\Users\\hugh.williams\\OneDrive - Peninsula Grammar\\Desktop\\Desktop\\Study-Assistant\\src\\StudyHud.Storage\\StudyHud.Storage.csproj",
+        "projectName": "StudyHud.Storage",
+        "projectPath": "C:\\Users\\hugh.williams\\OneDrive - Peninsula Grammar\\Desktop\\Desktop\\Study-Assistant\\src\\StudyHud.Storage\\StudyHud.Storage.csproj",
+        "packagesPath": "C:\\Users\\hugh.williams\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\hugh.williams\\OneDrive - Peninsula Grammar\\Desktop\\Desktop\\Study-Assistant\\src\\StudyHud.Storage\\obj\\",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "C:\\Users\\hugh.williams\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0-windows"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0-windows7.0": {
+            "targetAlias": "net8.0-windows",
+            "projectReferences": {
+              "C:\\Users\\hugh.williams\\OneDrive - Peninsula Grammar\\Desktop\\Desktop\\Study-Assistant\\src\\StudyHud.Core\\StudyHud.Core.csproj": {
+                "projectPath": "C:\\Users\\hugh.williams\\OneDrive - Peninsula Grammar\\Desktop\\Desktop\\Study-Assistant\\src\\StudyHud.Core\\StudyHud.Core.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0-windows7.0": {
+          "targetAlias": "net8.0-windows",
+          "dependencies": {
+            "Microsoft.Data.Sqlite": {
+              "target": "Package",
+              "version": "[8.0.0, )"
+            },
+            "Microsoft.Extensions.DependencyInjection.Abstractions": {
+              "target": "Package",
+              "version": "[8.0.0, )"
+            },
+            "Microsoft.Extensions.Logging.Abstractions": {
+              "target": "Package",
+              "version": "[8.0.0, )"
+            },
+            "System.Text.Json": {
+              "target": "Package",
+              "version": "[8.0.5, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Users\\hugh.williams\\dotnet\\dotnet\\sdk\\8.0.424/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}

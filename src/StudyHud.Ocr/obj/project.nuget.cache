@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "dgSpecHash": "0sHLoJbWTiA=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\hugh.williams\\OneDrive - Peninsula Grammar\\Desktop\\Desktop\\Study-Assistant\\src\\StudyHud.Ocr\\StudyHud.Ocr.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\hugh.williams\\.nuget\\packages\\microsoft.extensions.dependencyinjection.abstractions\\8.0.0\\microsoft.extensions.dependencyinjection.abstractions.8.0.0.nupkg.sha512",
+    "C:\\Users\\hugh.williams\\.nuget\\packages\\microsoft.extensions.logging.abstractions\\8.0.0\\microsoft.extensions.logging.abstractions.8.0.0.nupkg.sha512",
+    "C:\\Users\\hugh.williams\\.nuget\\packages\\microsoft.extensions.options\\8.0.0\\microsoft.extensions.options.8.0.0.nupkg.sha512",
+    "C:\\Users\\hugh.williams\\.nuget\\packages\\microsoft.extensions.primitives\\8.0.0\\microsoft.extensions.primitives.8.0.0.nupkg.sha512"
+  ],
+  "logs": []
+}

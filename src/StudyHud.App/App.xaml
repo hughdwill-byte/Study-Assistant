@@ -1,0 +1,14 @@
+<Application x:Class="StudyHud.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             ShutdownMode="OnExplicitShutdown">
+    <!--
+        ShutdownMode=OnExplicitShutdown so closing the Settings window
+        does not terminate the HUD (spec §105).
+    -->
+    <Application.Resources>
+        <ResourceDictionary>
+            <!-- Theme resources are injected at runtime by ThemeService -->
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>
