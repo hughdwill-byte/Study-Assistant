@@ -1,2 +1,0 @@
-C:\Users\hugh.williams\OneDrive - Peninsula Grammar\Desktop\Desktop\Study-Assistant\src\StudyHud.Ocr\obj\Debug\net8.0-windows10.0.19041.0\StudyHud.Ocr.csproj.AssemblyReference.cache
-C:\Users\hugh.williams\OneDrive - Peninsula Grammar\Desktop\Desktop\Study-Assistant\src\StudyHud.Ocr\obj\Debug\net8.0-windows10.0.19041.0\StudyHud.Ocr.GeneratedMSBuildEditorConfig.editorconfig
