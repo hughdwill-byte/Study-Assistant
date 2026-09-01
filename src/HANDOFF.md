@@ -228,6 +228,15 @@ content (spec §47), flag low-confidence/failed OCR for the library UI (§59, §
 batch through `ISearchIndex`. Local + non-generative throughout. A Notion sync (Phase 7) will
 produce the `RawNoteSource`s that feed this.
 
+**Notion sync (`NotionConnector` + `NotionBlockParser`)**: `NotionBlockParser` deterministically turns
+a page's block children into `ParsedNoteBlock`s — headings maintain a running breadcrumb, image blocks
+resolve their (temporary) URL, text blocks concatenate `rich_text` (spec §44). `NotionConnector`
+fetches block children (paginated), parses, downloads image bytes promptly before the signed URLs
+expire (§45), and feeds `INoteIndexer` (`SyncNotionPageAsync`). All blocked in Assessment Mode via the
+policy. Still pending: the `courses.notion_root_page_id` → page mapping (the connector currently treats
+the courseId as the page id), and the real DPAPI/credential-manager `ICredentialStore` (still a stub —
+see below), so live sync is inert until a token can be stored.
+
 **Question Finder runtime (`IQuestionFinder` → `QuestionFinder`)**: the query-time pipeline (§38, §54)
 — local OCR of the captured region → `FeatureExtractor` → `ISearchIndex.SearchAsync` → ranked
 results with explanations, plus the detected text/confidence so the UI can offer correction (§59).

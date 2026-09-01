@@ -16,6 +16,7 @@
     <ProjectReference Include="..\StudyHud.Storage\StudyHud.Storage.csproj" />
     <ProjectReference Include="..\StudyHud.Overlay\StudyHud.Overlay.csproj" />
     <ProjectReference Include="..\StudyHud.Windows\StudyHud.Windows.csproj" />
+    <ProjectReference Include="..\StudyHud.Notion\StudyHud.Notion.csproj" />
     <ProjectReference Include="..\StudyHud.Ocr\StudyHud.Ocr.csproj" />
   </ItemGroup>
   <ItemGroup>

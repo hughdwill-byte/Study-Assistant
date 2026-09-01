@@ -15,6 +15,7 @@ public sealed class NotionConnector : INoteSource
 {
     private readonly ICredentialStore _credentials;
     private readonly IAssessmentPolicyService _policy;
+    private readonly INoteIndexer _indexer;
     private readonly ILogger<NotionConnector> _logger;
     private readonly HttpClient _http;
 
@@ -28,10 +29,12 @@ public sealed class NotionConnector : INoteSource
     public NotionConnector(
         ICredentialStore credentials,
         IAssessmentPolicyService policy,
+        INoteIndexer indexer,
         ILogger<NotionConnector> logger)
     {
         _credentials = credentials;
         _policy = policy;
+        _indexer = indexer;
         _logger = logger;
 
         _http = new HttpClient();
@@ -122,22 +125,99 @@ public sealed class NotionConnector : INoteSource
     private async Task SyncCourseInternalAsync(
         string courseId, IProgress<SyncProgress>? progress, CancellationToken ct)
     {
-        // Step 1: Retrieve course root page and hierarchy
-        progress?.Report(new SyncProgress { Phase = "Reading Notion structure", CompletedItems = 0, TotalItems = 0 });
+        // The course → root Notion page mapping (courses.notion_root_page_id, spec §45) is provided
+        // by the library layer; until that is wired, callers can drive a page directly via
+        // SyncNotionPageAsync. Here we treat the courseId as the root page id so the pipeline is
+        // exercised end-to-end when a page id is supplied.
+        await SyncNotionPageAsync(courseId, courseId, notionPageId: courseId, progress, ct)
+            .ConfigureAwait(false);
+    }
 
-        // NOTE: Full Notion hierarchy traversal implementation goes here.
-        // The schema supports: course → week → page → section → image/text block.
-        // Each block is hashed; unchanged hashes skip re-download and re-OCR.
-        // Image URLs are downloaded promptly before they expire.
-        //
-        // IMPLEMENTATION STATUS: Notion API page traversal is scaffolded.
-        // Full block discovery, image download pipeline, and database upsert 
-        // are implemented in a follow-up phase (Phase 7 per spec §110).
-        //
-        // This connector correctly blocks all operations in Assessment Mode.
+    /// <summary>
+    /// Syncs a single Notion page into the local index (spec §45, §50): fetches its block children,
+    /// parses headings/images/text, downloads image bytes promptly (URLs expire), and hands the
+    /// result to the pre-indexing pipeline. Only images are downloaded — never uploaded anywhere.
+    /// </summary>
+    public async Task SyncNotionPageAsync(
+        string courseId, string courseName, string notionPageId,
+        IProgress<SyncProgress>? progress, CancellationToken ct)
+    {
+        progress?.Report(new SyncProgress { Phase = "Reading Notion page", CompletedItems = 0, TotalItems = 0 });
 
-        await Task.Delay(100, ct); // Placeholder for real async work
-        _logger.LogInformation("Notion sync structure for course {CourseId} completed.", courseId);
+        var blocks = await FetchBlockChildrenAsync(notionPageId, ct).ConfigureAwait(false);
+        var parsed = NotionBlockParser.ParsePage(blocks);
+
+        var pageUrl = $"https://www.notion.so/{notionPageId.Replace("-", "")}";
+        var sources = new List<RawNoteSource>();
+
+        foreach (var block in parsed)
+        {
+            ct.ThrowIfCancellationRequested();
+            byte[]? imageBytes = null;
+            if (block.IsImage)
+            {
+                imageBytes = await TryDownloadAsync(block.ImageUrl!, ct).ConfigureAwait(false);
+                if (imageBytes is null) continue; // expired/unavailable image — skip (spec §69)
+            }
+
+            sources.Add(new RawNoteSource
+            {
+                Id = $"{notionPageId}:{block.BlockId}",
+                PageId = notionPageId,
+                PageName = courseName,
+                HeadingPath = block.HeadingPath,
+                HeadingText = block.HeadingText,
+                NotionPageUrl = pageUrl,
+                NotionBlockId = block.BlockId,
+                ImageBytes = imageBytes,
+                Text = block.IsImage ? null : block.Text
+            });
+        }
+
+        await _indexer.IndexCourseSourcesAsync(courseId, courseName, sources, progress, ct)
+            .ConfigureAwait(false);
+
+        _logger.LogInformation("Synced Notion page {Page}: {Count} note sources.", notionPageId, sources.Count);
+    }
+
+    /// <summary>Fetches all block children of a page, following pagination (spec §45 pagination).</summary>
+    private async Task<List<JsonElement>> FetchBlockChildrenAsync(string pageId, CancellationToken ct)
+    {
+        var results = new List<JsonElement>();
+        string? cursor = null;
+
+        do
+        {
+            var path = $"blocks/{pageId}/children?page_size=100"
+                     + (cursor is null ? "" : $"&start_cursor={Uri.EscapeDataString(cursor)}");
+            var page = await GetAsync(path, ct).ConfigureAwait(false);
+            if (page is null) break;
+
+            if (page.Value.TryGetProperty("results", out var arr) && arr.ValueKind == JsonValueKind.Array)
+                foreach (var el in arr.EnumerateArray())
+                    results.Add(el.Clone()); // detach from the document we are about to dispose
+
+            cursor = page.Value.TryGetProperty("has_more", out var hasMore) && hasMore.ValueKind == JsonValueKind.True
+                && page.Value.TryGetProperty("next_cursor", out var nc) && nc.ValueKind == JsonValueKind.String
+                ? nc.GetString()
+                : null;
+        }
+        while (cursor is not null);
+
+        return results;
+    }
+
+    private async Task<byte[]?> TryDownloadAsync(string url, CancellationToken ct)
+    {
+        try
+        {
+            return await _http.GetByteArrayAsync(url, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to download Notion image (URL may have expired).");
+            return null;
+        }
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
