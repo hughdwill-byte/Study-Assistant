@@ -209,6 +209,19 @@ QUESTION CAPTURE → BitBlt → OCR (local) → OcrNormaliser → FeatureExtract
 Search results include per-result `MatchExplanation` so the user sees exactly which
 terms, variables, and expressions matched (spec §56). The score is never called "AI confidence".
 
+**Write/ingest path (`ISearchIndex.IndexItemsAsync` etc.)**: the sync/OCR layer hands the index
+`IndexableNoteItem`s (already OCR'd + normalised). `LocalSearchIndex` upserts them into
+`note_items` and rebuilds their `note_fts` rows through a single controlled writer, batched in one
+transaction, with a bounded `SQLITE_BUSY` retry (spec §49). `GetContentHashesAsync` lets the sync
+layer diff by content hash and skip unchanged items (spec §47). `note_fts` was migrated (migration 2)
+from an external-content FTS5 table keyed on the integer rowid to a **standalone FTS5 table carrying
+an UNINDEXED `note_item_id`**, so it is populated/deleted by the TEXT id and joins cleanly to
+`note_items.id` (the old external-content design mismatched the read path's join).
+
+Note: `DatabaseMigrator` and the index writer drive transactions with raw `BEGIN`/`COMMIT` or an
+explicit `command.Transaction = tx`, because Microsoft.Data.Sqlite rejects a command executed under
+an active `SqliteTransaction` it is not associated with.
+
 ---
 
 ## Assessment Mode Compliance (spec §41, §89, §182)

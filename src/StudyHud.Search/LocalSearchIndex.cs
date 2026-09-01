@@ -57,13 +57,8 @@ public sealed class LocalSearchIndex : ISearchIndex
             using var conn = new SqliteConnection($"Data Source={_dbPath};Mode=ReadOnly");
             await conn.OpenAsync(ct);
 
-            // Enable WAL for concurrent reads (spec §49)
-            using (var pragma = conn.CreateCommand())
-            {
-                pragma.CommandText = "PRAGMA journal_mode=WAL;";
-                await pragma.ExecuteNonQueryAsync(ct);
-            }
-
+            // journal_mode (WAL) is a persistent database property set once by the migrator; a
+            // read-only connection must not (and cannot) set it, so we just read (spec §49).
             var rawResults = await ExecuteFtsSearchAsync(conn, query, ct);
             var scored = ScoreAndRank(rawResults, query);
             var top = scored.Take(query.MaxResults).ToList();
@@ -102,7 +97,7 @@ public sealed class LocalSearchIndex : ISearchIndex
                 bm25(note_fts) AS bm25_score,
                 snippet(note_fts, 0, '[', ']', '...', 20) AS snippet
             FROM note_fts
-            JOIN note_items ni ON ni.id = note_fts.rowid
+            JOIN note_items ni ON ni.id = note_fts.note_item_id
             JOIN courses c ON c.id = ni.course_id
             WHERE note_fts MATCH @query
             """;
@@ -273,6 +268,221 @@ public sealed class LocalSearchIndex : ISearchIndex
             .Where(r => r.MatchScore > 0)
             .OrderByDescending(r => r.MatchScore)
             .ToList();
+    }
+
+    // ── Write path (spec §49, §50) ──────────────────────────────────────────
+
+    public async Task UpsertCourseAsync(string courseId, string courseName, CancellationToken ct = default)
+    {
+        await WithWriteConnectionAsync(async conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                INSERT INTO courses (id, name, created_at)
+                VALUES (@id, @name, @now)
+                ON CONFLICT(id) DO UPDATE SET name = excluded.name
+                """;
+            cmd.Parameters.AddWithValue("@id", courseId);
+            cmd.Parameters.AddWithValue("@name", courseName);
+            cmd.Parameters.AddWithValue("@now", DateTimeOffset.UtcNow.ToString("O"));
+            await cmd.ExecuteNonQueryAsync(ct);
+        }, ct);
+    }
+
+    public async Task IndexItemsAsync(IReadOnlyList<IndexableNoteItem> items, CancellationToken ct = default)
+    {
+        if (items.Count == 0) return;
+
+        await WithWriteConnectionAsync(async conn =>
+        {
+            // One batched transaction for the whole set — never held open across OCR/network
+            // work because callers pass already-OCR'd items (spec §49).
+            using var tx = conn.BeginTransaction();
+
+            using var upsert = conn.CreateCommand();
+            upsert.Transaction = tx;
+            upsert.CommandText = """
+                INSERT INTO note_items
+                    (id, course_id, week_id, week_label, page_id, page_name, heading_path,
+                     heading_text, source_type, notion_page_url, notion_block_id, local_cache_id,
+                     image_hash, ocr_raw_text, ocr_normalised, ocr_confidence, ocr_state, last_indexed_at)
+                VALUES
+                    (@id, @course, @weekId, @weekLabel, @pageId, @pageName, @headingPath,
+                     @headingText, @sourceType, @url, @blockId, @cacheId,
+                     @hash, @raw, @norm, @conf, @state, @now)
+                ON CONFLICT(id) DO UPDATE SET
+                    course_id=excluded.course_id, week_id=excluded.week_id, week_label=excluded.week_label,
+                    page_id=excluded.page_id, page_name=excluded.page_name, heading_path=excluded.heading_path,
+                    heading_text=excluded.heading_text, source_type=excluded.source_type,
+                    notion_page_url=excluded.notion_page_url, notion_block_id=excluded.notion_block_id,
+                    local_cache_id=excluded.local_cache_id, image_hash=excluded.image_hash,
+                    ocr_raw_text=excluded.ocr_raw_text, ocr_normalised=excluded.ocr_normalised,
+                    ocr_confidence=excluded.ocr_confidence, ocr_state=excluded.ocr_state,
+                    last_indexed_at=excluded.last_indexed_at
+                """;
+            DeclareItemParameters(upsert);
+
+            using var ftsDelete = conn.CreateCommand();
+            ftsDelete.Transaction = tx;
+            ftsDelete.CommandText = "DELETE FROM note_fts WHERE note_item_id = @id";
+            var ftsDeleteId = ftsDelete.Parameters.Add("@id", SqliteType.Text);
+
+            using var ftsInsert = conn.CreateCommand();
+            ftsInsert.Transaction = tx;
+            ftsInsert.CommandText = """
+                INSERT INTO note_fts (ocr_normalised, heading_path, page_name, note_item_id)
+                VALUES (@norm, @headingPath, @pageName, @id)
+                """;
+            var ftsNorm = ftsInsert.Parameters.Add("@norm", SqliteType.Text);
+            var ftsHeading = ftsInsert.Parameters.Add("@headingPath", SqliteType.Text);
+            var ftsPage = ftsInsert.Parameters.Add("@pageName", SqliteType.Text);
+            var ftsId = ftsInsert.Parameters.Add("@id", SqliteType.Text);
+
+            var now = DateTimeOffset.UtcNow.ToString("O");
+            foreach (var item in items)
+            {
+                BindItemParameters(upsert, item, now);
+                await upsert.ExecuteNonQueryAsync(ct);
+
+                // Rebuild the FTS row for this item (delete-then-insert keeps re-indexing idempotent).
+                ftsDeleteId.Value = item.Id;
+                await ftsDelete.ExecuteNonQueryAsync(ct);
+
+                ftsNorm.Value = item.OcrNormalised ?? string.Empty;
+                ftsHeading.Value = item.HeadingPath ?? string.Empty;
+                ftsPage.Value = item.PageName ?? string.Empty;
+                ftsId.Value = item.Id;
+                await ftsInsert.ExecuteNonQueryAsync(ct);
+            }
+
+            tx.Commit();
+            _logger.LogDebug("Indexed {Count} note items.", items.Count);
+        }, ct);
+    }
+
+    public async Task<IReadOnlyDictionary<string, string>> GetContentHashesAsync(
+        string courseId, CancellationToken ct = default)
+    {
+        var map = new Dictionary<string, string>();
+        using var conn = new SqliteConnection($"Data Source={_dbPath};Mode=ReadOnly");
+        await conn.OpenAsync(ct);
+
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText =
+            "SELECT id, image_hash FROM note_items WHERE course_id = @c AND image_hash IS NOT NULL";
+        cmd.Parameters.AddWithValue("@c", courseId);
+
+        using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            map[reader.GetString(0)] = reader.GetString(1);
+        return map;
+    }
+
+    public async Task DeleteCourseAsync(string courseId, CancellationToken ct = default)
+    {
+        await WithWriteConnectionAsync(async conn =>
+        {
+            using var tx = conn.BeginTransaction();
+
+            using (var delFts = conn.CreateCommand())
+            {
+                delFts.Transaction = tx;
+                delFts.CommandText = """
+                    DELETE FROM note_fts
+                    WHERE note_item_id IN (SELECT id FROM note_items WHERE course_id = @c)
+                    """;
+                delFts.Parameters.AddWithValue("@c", courseId);
+                await delFts.ExecuteNonQueryAsync(ct);
+            }
+            using (var delItems = conn.CreateCommand())
+            {
+                delItems.Transaction = tx;
+                delItems.CommandText = "DELETE FROM note_items WHERE course_id = @c";
+                delItems.Parameters.AddWithValue("@c", courseId);
+                await delItems.ExecuteNonQueryAsync(ct);
+            }
+
+            tx.Commit();
+        }, ct);
+    }
+
+    public async Task<int> GetIndexedCountAsync(string courseId, CancellationToken ct = default)
+    {
+        using var conn = new SqliteConnection($"Data Source={_dbPath};Mode=ReadOnly");
+        await conn.OpenAsync(ct);
+
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText =
+            "SELECT COUNT(*) FROM note_items WHERE course_id = @c AND ocr_state = 'indexed'";
+        cmd.Parameters.AddWithValue("@c", courseId);
+        return (int)(long)(await cmd.ExecuteScalarAsync(ct) ?? 0L);
+    }
+
+    private static void DeclareItemParameters(SqliteCommand cmd)
+    {
+        foreach (var name in new[]
+        {
+            "@id", "@course", "@weekId", "@weekLabel", "@pageId", "@pageName", "@headingPath",
+            "@headingText", "@sourceType", "@url", "@blockId", "@cacheId", "@hash", "@raw",
+            "@norm", "@conf", "@state", "@now"
+        })
+        {
+            cmd.Parameters.Add(name, name is "@conf" ? SqliteType.Real : SqliteType.Text);
+        }
+    }
+
+    private static void BindItemParameters(SqliteCommand cmd, IndexableNoteItem item, string now)
+    {
+        cmd.Parameters["@id"].Value = item.Id;
+        cmd.Parameters["@course"].Value = item.CourseId;
+        cmd.Parameters["@weekId"].Value = (object?)item.WeekId ?? DBNull.Value;
+        cmd.Parameters["@weekLabel"].Value = (object?)item.WeekLabel ?? DBNull.Value;
+        cmd.Parameters["@pageId"].Value = item.PageId;
+        cmd.Parameters["@pageName"].Value = item.PageName;
+        cmd.Parameters["@headingPath"].Value = item.HeadingPath ?? string.Empty;
+        cmd.Parameters["@headingText"].Value = (object?)item.HeadingText ?? DBNull.Value;
+        cmd.Parameters["@sourceType"].Value = item.SourceType;
+        cmd.Parameters["@url"].Value = item.NotionPageUrl;
+        cmd.Parameters["@blockId"].Value = (object?)item.NotionBlockId ?? DBNull.Value;
+        cmd.Parameters["@cacheId"].Value = (object?)item.LocalCacheId ?? DBNull.Value;
+        cmd.Parameters["@hash"].Value = (object?)item.ContentHash ?? DBNull.Value;
+        cmd.Parameters["@raw"].Value = (object?)item.OcrRawText ?? DBNull.Value;
+        cmd.Parameters["@norm"].Value = item.OcrNormalised ?? string.Empty;
+        cmd.Parameters["@conf"].Value = item.OcrConfidence;
+        cmd.Parameters["@state"].Value = item.OcrState;
+        cmd.Parameters["@now"].Value = now;
+    }
+
+    /// <summary>
+    /// Runs a write action against a single ReadWrite connection with foreign keys on and a busy
+    /// timeout, retrying a bounded number of times on SQLITE_BUSY/LOCKED rather than freezing (spec §49).
+    /// </summary>
+    private async Task WithWriteConnectionAsync(Func<SqliteConnection, Task> action, CancellationToken ct)
+    {
+        const int maxAttempts = 5;
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                using var conn = new SqliteConnection($"Data Source={_dbPath};Mode=ReadWrite;Cache=Shared");
+                await conn.OpenAsync(ct);
+                using (var pragma = conn.CreateCommand())
+                {
+                    pragma.CommandText = "PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;";
+                    await pragma.ExecuteNonQueryAsync(ct);
+                }
+                await action(conn);
+                return;
+            }
+            catch (SqliteException ex) when (
+                (ex.SqliteErrorCode == 5 || ex.SqliteErrorCode == 6) && attempt < maxAttempts)
+            {
+                var delay = TimeSpan.FromMilliseconds(50 * Math.Pow(2, attempt - 1));
+                _logger.LogWarning("SQLite busy (attempt {Attempt}); retrying in {Ms}ms.",
+                    attempt, delay.TotalMilliseconds);
+                await Task.Delay(delay, ct);
+            }
+        }
     }
 
     private record RawSearchResult

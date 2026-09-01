@@ -52,6 +52,68 @@ public interface ISearchIndex
         SearchQuery query, CancellationToken ct = default);
 
     Task<bool> IsReadyAsync(string courseId, CancellationToken ct = default);
+
+    // ── Write path (spec §49, §50) ───────────────────────────────────────────
+
+    /// <summary>
+    /// Inserts or replaces note items and their full-text rows through the single controlled
+    /// writer, batched in one transaction (spec §49). Safe to call repeatedly; an item with an
+    /// existing id is replaced. Never held open across OCR/network work — callers pass already
+    /// OCR'd items.
+    /// </summary>
+    Task IndexItemsAsync(IReadOnlyList<IndexableNoteItem> items, CancellationToken ct = default);
+
+    /// <summary>Ensures a course row exists so note items can reference it (FK target).</summary>
+    Task UpsertCourseAsync(string courseId, string courseName, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns note-item id → content hash for a course, so a sync layer can skip unchanged
+    /// content and only re-OCR/re-index what changed (spec §47).
+    /// </summary>
+    Task<IReadOnlyDictionary<string, string>> GetContentHashesAsync(
+        string courseId, CancellationToken ct = default);
+
+    /// <summary>Removes all note items (and their full-text rows) for a course.</summary>
+    Task DeleteCourseAsync(string courseId, CancellationToken ct = default);
+
+    /// <summary>Count of successfully indexed items for a course.</summary>
+    Task<int> GetIndexedCountAsync(string courseId, CancellationToken ct = default);
+}
+
+/// <summary>
+/// A note item ready to be written into the local index (spec §48). Produced by the sync/OCR
+/// pipeline after an image or text block has been OCR'd and its features normalised.
+/// </summary>
+public record IndexableNoteItem
+{
+    public required string Id { get; init; }
+    public required string CourseId { get; init; }
+    public string? WeekId { get; init; }
+    public string? WeekLabel { get; init; }
+    public required string PageId { get; init; }
+    public required string PageName { get; init; }
+    public string HeadingPath { get; init; } = "";
+    public string? HeadingText { get; init; }
+
+    /// <summary>'image' or 'text'.</summary>
+    public string SourceType { get; init; } = "image";
+
+    public required string NotionPageUrl { get; init; }
+    public string? NotionBlockId { get; init; }
+    public string? LocalCacheId { get; init; }
+
+    /// <summary>Hash of the source content (image bytes / text) for incremental sync (spec §47).</summary>
+    public string? ContentHash { get; init; }
+
+    public string? OcrRawText { get; init; }
+
+    /// <summary>Normalised, searchable text (spec §53). This is what FTS indexes.</summary>
+    public required string OcrNormalised { get; init; }
+
+    public float OcrConfidence { get; init; } = 1.0f;
+
+    /// <summary>'indexed' | 'pending' | 'failed' | 'low_confidence' (spec §60).</summary>
+    public string OcrState { get; init; } = "indexed";
 }
 
 public record SearchQuery
