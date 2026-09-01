@@ -25,7 +25,21 @@ public sealed class GlobalInputService : IGlobalInputService
 
     // Low-level mouse hook
     private IntPtr _mouseHookHandle;
-    private LowLevelMouseProc? _mouseHookDelegate; // GC pin
+    private LowLevelHookProc? _mouseHookDelegate; // GC pin
+
+    // Low-level keyboard hook (only used to observe the configured trigger key, spec §6)
+    private IntPtr _keyboardHookHandle;
+    private LowLevelHookProc? _keyboardHookDelegate; // GC pin
+
+    // Copy-on-write set of virtual keys the keyboard hook should report. Read lock-free in the
+    // latency-critical callback; swapped under _watchLock on mutation. Everything else passes
+    // straight through so ordinary typing is never enqueued (spec §36, §70).
+    private volatile HashSet<int> _watchedKeys = new();
+    private readonly object _watchLock = new();
+
+    // Last observed down/up state per watched key, so auto-repeat WM_KEYDOWNs only enqueue once.
+    // Touched only inside the hook callback (single-threaded on the installing thread).
+    private readonly Dictionary<int, bool> _keyDownState = new();
 
     // Channel: hook callback → input worker (bounded, fail-open)
     private readonly Channel<GlobalInputEventArgs> _inputChannel =
@@ -43,12 +57,19 @@ public sealed class GlobalInputService : IGlobalInputService
 
     private const int WM_HOTKEY = 0x0312;
     private const int WH_MOUSE_LL = 14;
+    private const int WH_KEYBOARD_LL = 13;
 
     // Mouse messages
     private const int WM_XBUTTONDOWN = 0x020B;
     private const int WM_XBUTTONUP = 0x020C;
     private const int XBUTTON1 = 0x0001; // Mouse 4
     private const int XBUTTON2 = 0x0002; // Mouse 5
+
+    // Keyboard messages
+    private const int WM_KEYDOWN = 0x0100;
+    private const int WM_KEYUP = 0x0101;
+    private const int WM_SYSKEYDOWN = 0x0104;
+    private const int WM_SYSKEYUP = 0x0105;
 
     public GlobalInputService(ILogger<GlobalInputService> logger)
     {
@@ -62,8 +83,9 @@ public sealed class GlobalInputService : IGlobalInputService
         // Create a message-only window on the UI thread for WM_HOTKEY delivery
         System.Windows.Application.Current.Dispatcher.Invoke(CreateMessageWindow);
 
-        // Install low-level mouse hook (must be on a thread with a message loop)
+        // Install low-level hooks (must be on a thread with a message loop)
         InstallMouseHook();
+        InstallKeyboardHook();
 
         _workerTask = Task.Run(() => InputWorkerAsync(_cts.Token), _cts.Token);
 
@@ -79,11 +101,16 @@ public sealed class GlobalInputService : IGlobalInputService
         foreach (var id in _hotkeys.Keys.ToList())
             UnregisterHotKeyInternal(id);
 
-        // Remove mouse hook
+        // Remove hooks
         if (_mouseHookHandle != IntPtr.Zero)
         {
             UnhookWindowsHookEx(_mouseHookHandle);
             _mouseHookHandle = IntPtr.Zero;
+        }
+        if (_keyboardHookHandle != IntPtr.Zero)
+        {
+            UnhookWindowsHookEx(_keyboardHookHandle);
+            _keyboardHookHandle = IntPtr.Zero;
         }
 
         _hwndSource?.Dispose();
@@ -203,6 +230,81 @@ public sealed class GlobalInputService : IGlobalInputService
         return CallNextHookEx(_mouseHookHandle, nCode, wParam, lParam);
     }
 
+    // ── Low-level keyboard hook ─────────────────────────────────────────────
+
+    private void InstallKeyboardHook()
+    {
+        _keyboardHookDelegate = KeyboardHookCallback;
+        _keyboardHookHandle = SetWindowsHookEx(WH_KEYBOARD_LL, _keyboardHookDelegate,
+            IntPtr.Zero, 0);
+
+        if (_keyboardHookHandle == IntPtr.Zero)
+            _logger.LogWarning("Low-level keyboard hook could not be installed.");
+        else
+            _logger.LogDebug("Low-level keyboard hook installed.");
+    }
+
+    private IntPtr KeyboardHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+    {
+        // Latency-critical path: only the configured trigger keys are ever inspected/enqueued;
+        // all other keystrokes fall straight through untouched (never observed, never logged).
+        if (nCode >= 0)
+        {
+            int msg = wParam.ToInt32();
+            bool isDown = msg is WM_KEYDOWN or WM_SYSKEYDOWN;
+            bool isUp = msg is WM_KEYUP or WM_SYSKEYUP;
+
+            if (isDown || isUp)
+            {
+                int vk = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam).vkCode;
+                if (_watchedKeys.Contains(vk))
+                {
+                    // Collapse auto-repeat: only enqueue on an actual down↔up transition.
+                    bool previouslyDown = _keyDownState.TryGetValue(vk, out var d) && d;
+                    if (isDown != previouslyDown)
+                    {
+                        _keyDownState[vk] = isDown;
+                        _inputChannel.Writer.TryWrite(new GlobalInputEventArgs
+                        {
+                            EventType = GlobalInputEventType.KeyboardKey,
+                            VirtualKey = vk,
+                            IsDown = isDown,
+                            Timestamp = DateTimeOffset.UtcNow
+                        });
+                    }
+                }
+            }
+        }
+
+        // Never suppress: Study HUD only observes the trigger, it does not swallow the keystroke.
+        return CallNextHookEx(_keyboardHookHandle, nCode, wParam, lParam);
+    }
+
+    // ── Watched keys (for keyboard Hold-to-Interact triggers) ────────────────
+
+    public void WatchKey(int virtualKey)
+    {
+        lock (_watchLock)
+        {
+            if (_watchedKeys.Contains(virtualKey)) return;
+            _watchedKeys = new HashSet<int>(_watchedKeys) { virtualKey };
+        }
+        _logger.LogDebug("Watching virtual key 0x{Vk:X} for Hold-to-Interact.", virtualKey);
+    }
+
+    public void UnwatchKey(int virtualKey)
+    {
+        lock (_watchLock)
+        {
+            if (!_watchedKeys.Contains(virtualKey)) return;
+            var next = new HashSet<int>(_watchedKeys);
+            next.Remove(virtualKey);
+            _watchedKeys = next;
+        }
+        // _keyDownState is left to self-heal on the next transition — it is only ever mutated on
+        // the hook thread, so it must not be touched from here (WatchKey/UnwatchKey run elsewhere).
+    }
+
     // ── Input worker ────────────────────────────────────────────────────────
 
     private async Task InputWorkerAsync(CancellationToken ct)
@@ -222,10 +324,10 @@ public sealed class GlobalInputService : IGlobalInputService
 
     // ── P/Invoke for hooks ──────────────────────────────────────────────────
 
-    private delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
+    private delegate IntPtr LowLevelHookProc(int nCode, IntPtr wParam, IntPtr lParam);
 
     [DllImport("user32.dll", SetLastError = true)]
-    private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn,
+    private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelHookProc lpfn,
         IntPtr hMod, uint dwThreadId);
 
     [DllImport("user32.dll")]
@@ -243,6 +345,16 @@ public sealed class GlobalInputService : IGlobalInputService
         public uint mouseData;
         public uint flags;
         public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct KBDLLHOOKSTRUCT
+    {
+        public int vkCode;
+        public int scanCode;
+        public int flags;
+        public int time;
         public IntPtr dwExtraInfo;
     }
 

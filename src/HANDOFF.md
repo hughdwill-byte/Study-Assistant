@@ -57,6 +57,8 @@ the panel moves/resizes. OverlayManager coordinates this.
 - **RegisterHotKey**: global keyboard shortcuts (Panic Hide, workspace switch)
 - **SetWinEventHook (EVENT_SYSTEM_FOREGROUND)**: foreground app tracking — never polls
 - **Low-level mouse hook**: only for side-button hold/release (one-gesture capture, macros)
+- **Low-level keyboard hook**: observes only keys registered via `WatchKey` (the Hold-to-Interact
+  trigger key) — never streams ordinary typing; never suppresses the keystroke
 - **SendInput**: keyboard/text injection from macros
 
 Hook callbacks are **latency-critical**. They MUST only: read cached state, update minimal
@@ -262,7 +264,7 @@ dotnet run --project StudyHud.App/StudyHud.App.csproj
 | Phase | Description | Status |
 |-------|-------------|--------|
 | 1 | Foundation: solution, DI, logging, monitor service, overlay HWND | ✅ Complete |
-| 2 | HUD Engine: Ghost/Active/Edit, Hold-to-Interact, panels, persistence | 🟡 In progress — settings + layout persistence done; keyboard-hold trigger delivery still TODO |
+| 2 | HUD Engine: Ghost/Active/Edit, Hold-to-Interact, panels, persistence | 🟡 In progress — settings + layout persistence done; Hold-to-Interact works for both mouse side-buttons and keyboard keys |
 | 3 | Docking: snapping, dock graph, edge collapse | 🔲 Planned |
 | 4 | Workspaces: switching, control capsule | 🟡 In progress — `WorkspaceCoordinator` saves/restores layout + switches macro profile on workspace change; control capsule still basic |
 | 5 | Macro Engine: input, triggers, actions, profiles, editor | 🔲 Planned |
@@ -289,11 +291,12 @@ dotnet run --project StudyHud.App/StudyHud.App.csproj
   not yet created — Phase 3/4 work.
 - `MacroEngine` does not yet install low-level hooks — Phase 5 adds `IGlobalInputService`
   implementation with the hook layer.
-- **Keyboard-key Hold-to-Interact is not yet delivered.** `GlobalInputService` installs only a
-  low-level *mouse* hook, so a keyboard trigger (the Caps Lock default) never reaches
-  `HoldToInteractService.HandleTriggerKeyStateChange`. Add a low-level keyboard hook (`WH_KEYBOARD_LL`)
-  in `GlobalInputService` that enqueues key down/up for the configured trigger vk. Mouse side-button
-  triggers already work end-to-end.
+- Keyboard-key Hold-to-Interact now works: `GlobalInputService` installs a `WH_KEYBOARD_LL` hook
+  that reports down/up **only** for keys registered via `WatchKey` (the configured trigger), so
+  ordinary typing is never observed or enqueued. `HoldToInteractService` watches/unwatches the
+  trigger key as it changes. Note: the Caps Lock default still toggles caps state (the hook
+  observes, it does not suppress) — a different default key or opt-in suppression could be offered
+  later. Mouse side-button triggers also work end-to-end.
 - Named/saved layouts (spec §21, e.g. "Lecture", "Dual Monitor Study") are not yet exposed in the
   UI. `ILayoutService` already supports arbitrary layout ids; `WorkspaceCoordinator` currently uses
   one auto-layout per workspace (`workspace-<Workspace>`). A layout manager UI is the next step.
