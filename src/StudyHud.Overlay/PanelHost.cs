@@ -25,6 +25,9 @@ public sealed class PanelHost : Canvas
     private readonly List<HudPanelBase> _panels = [];
     private ControlCapsule? _capsule;
 
+    /// <summary>The monitor this host renders panels for.</summary>
+    public string MonitorId => _monitor.MonitorId;
+
     public PanelHost(
         MonitorInfo monitor,
         IApplicationStateService appState,

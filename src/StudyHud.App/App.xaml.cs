@@ -59,9 +59,24 @@ public partial class App : Application
             var migrator = _host.Services.GetRequiredService<DatabaseMigrator>();
             await migrator.MigrateAsync();
 
-            // Step 4: Apply theme
+            // Step 4: Load persisted settings and apply them to initial state (spec §19, §71)
+            var settingsStore = _host.Services.GetRequiredService<ISettingsStore>();
+            var settings = await settingsStore.LoadAsync();
+
+            // Step 4a: Apply theme from settings
             var theme = _host.Services.GetRequiredService<IThemeService>();
-            theme.ApplyTheme("Default");
+            theme.ApplyTheme(settings.ThemeId);
+
+            // Step 4b: Restore session context BEFORE overlays are built so panels populate
+            // for the correct workspace and Assessment Mode is enforced from the first frame.
+            var appState = _host.Services.GetRequiredService<IApplicationStateService>();
+            // Force the policy singleton to construct now so it subscribes to state changes
+            // before we set Assessment Mode — the policy mirrors ApplicationState (spec §41, §182).
+            _ = _host.Services.GetRequiredService<AssessmentPolicyService>();
+            await appState.SetAssessmentModeAsync(settings.AssessmentModeActive);
+            if (!string.IsNullOrWhiteSpace(settings.CurrentCourseId))
+                await appState.SetCourseAsync(settings.CurrentCourseId!);
+            await appState.SwitchWorkspaceAsync(settings.CurrentWorkspace);
 
             // Step 5: Start foreground tracking
             var foreground = _host.Services.GetRequiredService<IForegroundWindowService>();
@@ -71,15 +86,20 @@ public partial class App : Application
             var overlayManager = _host.Services.GetRequiredService<OverlayManager>();
             overlayManager.Initialise();
 
-            // Step 6b: Start global input + Hold-to-Interact
+            // Step 6b: Start global input + Hold-to-Interact (with the user's configured trigger)
             var globalInput = _host.Services.GetRequiredService<GlobalInputService>();
             await globalInput.StartAsync();
             var holdToInteract = _host.Services.GetRequiredService<HoldToInteractService>();
+            holdToInteract.ApplySettings(settings);
             holdToInteract.Start();
 
             // Step 7: Start macro engine
             var macroEngine = _host.Services.GetRequiredService<MacroEngine>();
             macroEngine.Start();
+
+            // Step 7b: Start workspace coordination (restores saved layout + macro profile)
+            var coordinator = _host.Services.GetRequiredService<WorkspaceCoordinator>();
+            coordinator.Start();
 
             // Step 8: Show settings window (first run: onboarding)
             var mainWindow = _host.Services.GetRequiredService<MainWindow>();
@@ -157,6 +177,20 @@ public partial class App : Application
                         services.BuildServiceProvider()
                             .GetRequiredService<ILogger<LocalSearchIndex>>()));
 
+                // ── Settings + layout persistence (spec §19, §71) ────────────
+                services.AddSingleton<ISettingsStore>(sp =>
+                    new JsonSettingsStore(
+                        Path.Combine(GetAppDataDir(), "settings.json"),
+                        sp.GetRequiredService<ILogger<JsonSettingsStore>>()));
+                services.AddSingleton<ILayoutService>(sp =>
+                    new LayoutService(
+                        Path.Combine(GetAppDataDir(), "layouts"),
+                        sp.GetRequiredService<ILogger<LayoutService>>()));
+
+                // ── Coordination (spec §22, §29, §134) ───────────────────────
+                services.AddSingleton<IMacroProfileSwitcher>(sp => sp.GetRequiredService<MacroEngine>());
+                services.AddSingleton<WorkspaceCoordinator>();
+
                 // ── Notion ───────────────────────────────────────────────────
                 services.AddSingleton<ICredentialStore, WindowsCredentialStore>();
                 services.AddSingleton<INoteSource, NotionConnector>();
@@ -170,14 +204,16 @@ public partial class App : Application
             .Build();
     }
 
-    private static string GetDatabasePath()
+    private static string GetAppDataDir()
     {
         var dir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "StudyHud");
         Directory.CreateDirectory(dir);
-        return Path.Combine(dir, "studyhud.db");
+        return dir;
     }
+
+    private static string GetDatabasePath() => Path.Combine(GetAppDataDir(), "studyhud.db");
 
     private static async Task StartBackgroundSyncAsync(IServiceProvider services)
     {
@@ -204,6 +240,40 @@ public partial class App : Application
         }
     }
 
+    /// <summary>
+    /// Saves the on-screen layout and the current session context (workspace, course,
+    /// assessment mode, theme) so the next launch restores exactly where the user left off
+    /// (spec §19, §71). Never throws — shutdown must not be blocked by a save failure.
+    /// </summary>
+    private static async Task SaveSessionAsync(IServiceProvider services)
+    {
+        try
+        {
+            var coordinator = services.GetService<WorkspaceCoordinator>();
+            if (coordinator != null)
+                await coordinator.SaveCurrentAsync();
+
+            var settingsStore = services.GetService<ISettingsStore>();
+            var appState = services.GetService<IApplicationStateService>();
+            var theme = services.GetService<IThemeService>();
+            if (settingsStore != null && appState != null)
+            {
+                var state = appState.Current;
+                await settingsStore.UpdateAsync(s => s with
+                {
+                    CurrentWorkspace = state.CurrentWorkspace,
+                    CurrentCourseId = state.CurrentCourseId,
+                    AssessmentModeActive = state.AssessmentModeActive,
+                    ThemeId = theme?.CurrentThemeId ?? s.ThemeId
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Failed to save session on exit (non-fatal).");
+        }
+    }
+
     protected override async void OnExit(ExitEventArgs e)
     {
         Log.Information("Study HUD shutting down.");
@@ -212,6 +282,9 @@ public partial class App : Application
         {
             try
             {
+                // Persist layout + session context before tearing anything down (spec §19)
+                await SaveSessionAsync(_host.Services);
+
                 // Graceful shutdown
                 var foreground = _host.Services.GetService<IForegroundWindowService>();
                 if (foreground != null) await foreground.StopAsync();

@@ -13,7 +13,7 @@ namespace StudyHud.Macros.Services;
 /// Input arrives via a channel from the low-level hook layer.
 /// All condition checks use the cached ForegroundContext — no inline process lookup.
 /// </summary>
-public sealed class MacroEngine : IDisposable
+public sealed class MacroEngine : IDisposable, IMacroProfileSwitcher
 {
     private readonly ILogger<MacroEngine> _logger;
     private readonly IApplicationStateService _appState;

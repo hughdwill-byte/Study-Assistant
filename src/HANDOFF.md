@@ -109,6 +109,34 @@ ClickOnce or Squirrel installer. Decision must be validated with actual hook tes
 
 ---
 
+### ADR-007: Settings + Layout Persistence & Coordination (spec §19, §22, §29, §71)
+
+**Problem**: Panel layouts, the Hold-to-Interact trigger, theme, course, and Assessment Mode
+had nowhere to persist, and nothing coordinated the "workspace + layout + macro profile"
+switch the spec requires (§134). `ILayoutService` and a `WorkspaceCoordinator` were referenced
+but did not exist.
+
+**Chosen approach**: Local-first JSON under `%LOCALAPPDATA%\StudyHud`:
+- `settings.json` ← `JsonSettingsStore : ISettingsStore` (`StudyHudSettings` record).
+- `layouts\workspace-<Workspace>.json` ← `LayoutService : ILayoutService` (list of `PanelLayout`).
+
+Both write atomically (temp file + `File.Move`) and fall back to defaults on a missing/corrupt
+file (§69). No secrets are ever written here — the Notion token stays in the credential store (§46).
+
+`WorkspaceCoordinator` (in `StudyHud.Overlay`) subscribes to `ApplicationState.StateChanged`.
+On a workspace change it persists the outgoing layout, restores the incoming layout (recovering
+panels whose monitor is gone, §160), and switches the associated macro profile via the small
+`IMacroProfileSwitcher` abstraction (implemented by `MacroEngine`) — so the overlay layer never
+references the macro engine assembly directly. `App` starts it after overlays init and calls
+`SaveCurrentAsync()` on exit.
+
+**Assessment Mode is now single-source-of-truth**: `AssessmentPolicyService` subscribes to
+`ApplicationState` and mirrors `AssessmentModeActive`. Previously the settings-window toggle
+updated only `ApplicationState`, so the enforcement point (`IsOperationAllowed`) never changed
+and blocked nothing (§41, §182). The sync is one-way; the policy never writes back.
+
+---
+
 ## Module Responsibilities
 
 | Module | Owns |
@@ -120,7 +148,7 @@ ClickOnce or Squirrel installer. Decision must be validated with actual hook tes
 | `StudyHud.Capture` | `CaptureService`, `CaptureOverlayWindow` |
 | `StudyHud.Ocr` | `WindowsOcrService`, `OcrNormaliser` |
 | `StudyHud.Search` | `FeatureExtractor`, `LocalSearchIndex` |
-| `StudyHud.Storage` | `DatabaseMigrator`, SQLite schema |
+| `StudyHud.Storage` | `DatabaseMigrator`, SQLite schema, `JsonSettingsStore`, `LayoutService` |
 | `StudyHud.Notion` | `NotionConnector`, `WindowsCredentialStore` |
 | `StudyHud.Theming` | `ThemeService`, `ThemeTokenSet` |
 | `StudyHud.App` | DI wiring, `App.xaml.cs`, `MainWindow` |
@@ -234,9 +262,9 @@ dotnet run --project StudyHud.App/StudyHud.App.csproj
 | Phase | Description | Status |
 |-------|-------------|--------|
 | 1 | Foundation: solution, DI, logging, monitor service, overlay HWND | ✅ Complete |
-| 2 | HUD Engine: Ghost/Active/Edit, Hold-to-Interact, panels, persistence | 🔲 Next |
+| 2 | HUD Engine: Ghost/Active/Edit, Hold-to-Interact, panels, persistence | 🟡 In progress — settings + layout persistence done; keyboard-hold trigger delivery still TODO |
 | 3 | Docking: snapping, dock graph, edge collapse | 🔲 Planned |
-| 4 | Workspaces: switching, control capsule | 🔲 Planned |
+| 4 | Workspaces: switching, control capsule | 🟡 In progress — `WorkspaceCoordinator` saves/restores layout + switches macro profile on workspace change; control capsule still basic |
 | 5 | Macro Engine: input, triggers, actions, profiles, editor | 🔲 Planned |
 | 6 | Capture: custom region, clipboard, multi-monitor DPI | 🔲 Planned |
 | 7 | Study Library: courses, SQLite, Notion full connector, cache | 🔲 Planned |
@@ -261,6 +289,16 @@ dotnet run --project StudyHud.App/StudyHud.App.csproj
   not yet created — Phase 3/4 work.
 - `MacroEngine` does not yet install low-level hooks — Phase 5 adds `IGlobalInputService`
   implementation with the hook layer.
+- **Keyboard-key Hold-to-Interact is not yet delivered.** `GlobalInputService` installs only a
+  low-level *mouse* hook, so a keyboard trigger (the Caps Lock default) never reaches
+  `HoldToInteractService.HandleTriggerKeyStateChange`. Add a low-level keyboard hook (`WH_KEYBOARD_LL`)
+  in `GlobalInputService` that enqueues key down/up for the configured trigger vk. Mouse side-button
+  triggers already work end-to-end.
+- Named/saved layouts (spec §21, e.g. "Lecture", "Dual Monitor Study") are not yet exposed in the
+  UI. `ILayoutService` already supports arbitrary layout ids; `WorkspaceCoordinator` currently uses
+  one auto-layout per workspace (`workspace-<Workspace>`). A layout manager UI is the next step.
+- The settings window does not yet edit `StudyHudSettings` (trigger, hotkeys, theme, exclusions,
+  workspace→profile map). The store + model exist; the editor UI is Phase 2/12 work.
 - DPI handling in `CaptureOverlayWindow.WpfToPhysical` uses primary monitor scale as
   an approximation — needs per-monitor DPI at the capture point (Phase 6).
 
