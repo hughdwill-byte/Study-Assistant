@@ -319,11 +319,13 @@ dotnet run --project StudyHud.App/StudyHud.App.csproj
 
 - Credential storage is now `DpapiCredentialStore` (DPAPI per-user, encrypted at rest). A
   Credential-Manager (CredWrite/CredRead) backend could replace it later but is not required.
-- Notion sync now resolves the course's `notion_root_page_id` via `ICourseRepository` and stamps
-  `last_synced_at` after a run. The remaining glue to make it live is a **Notion token entry field**
-  in the settings window (calls `NotionConnector.StoreTokenAsync`) and course-creation UI to set a
-  course's root page id. Block traversal, image download, indexing, and index-health reporting
-  (`CourseRepository.GetIndexHealthAsync`, spec §60) are done.
+- Notion sync is now wired end to end. `LibraryView` (the "Courses" / "Notion Sync" / "Index Status"
+  sidebar pages) provides Notion token entry (`INoteSource.StoreTokenAsync`, DPAPI-encrypted),
+  connection test, course creation (name + `notion_root_page_id`), per-course Sync and Delete, and
+  the §60 index-health readout. `NotionConnector` resolves the course's root page via
+  `ICourseRepository`. What is left is a live end-to-end run against a real Notion workspace/token —
+  the HTTP traversal path cannot be exercised in CI, so validate it on a Windows machine with a real
+  integration token and shared pages.
 - `WindowsOcrService` uses reflection to call WinRT — replace with direct SDK calls
   using `Microsoft.Windows.CsWinRT` in Phase 8.
 - Interactive island HWNDs (RevealTab, ControlCapsule) are architecturally planned but

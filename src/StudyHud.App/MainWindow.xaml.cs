@@ -78,6 +78,14 @@ public partial class MainWindow : Window
         PageHost.Content = _settingsView;
     }
 
+    private LibraryView? _libraryView;
+
+    private void OnShowLibrary(object sender, RoutedEventArgs e)
+    {
+        _libraryView ??= _services.GetRequiredService<LibraryView>();
+        PageHost.Content = _libraryView;
+    }
+
     private void OnShowHome(object sender, RoutedEventArgs e)
     {
         PageHost.Content = HomeView;

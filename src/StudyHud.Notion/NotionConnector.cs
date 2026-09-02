@@ -82,6 +82,9 @@ public sealed class NotionConnector : INoteSource
         _logger.LogInformation("Notion token stored securely.");
     }
 
+    public async Task<bool> HasStoredTokenAsync(CancellationToken ct = default)
+        => !string.IsNullOrEmpty(await _credentials.RetrieveAsync(CredentialKey, ct));
+
     // ── Sync ────────────────────────────────────────────────────────────────
 
     public async Task SyncCourseAsync(

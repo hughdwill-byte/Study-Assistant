@@ -81,7 +81,7 @@
                     <Button Content="Home" Margin="8,2" Click="OnShowHome"/>
                     <Button Content="Workspaces" Margin="8,2"
                             Click="OnSwitchWorkspaceNoteTaking"/>
-                    <Button Content="Courses" Margin="8,2"/>
+                    <Button Content="Courses" Margin="8,2" Click="OnShowLibrary"/>
                     <Button Content="Macros" Margin="8,2"/>
                     <Button Content="Layouts" Margin="8,2"/>
 
@@ -89,8 +89,8 @@
                                FontSize="10" Opacity="0.5"
                                Foreground="{DynamicResource SecondaryText}"/>
 
-                    <Button Content="Notion Sync" Margin="8,2"/>
-                    <Button Content="Index Status" Margin="8,2"/>
+                    <Button Content="Notion Sync" Margin="8,2" Click="OnShowLibrary"/>
+                    <Button Content="Index Status" Margin="8,2" Click="OnShowLibrary"/>
 
                     <TextBlock Text="APP" Margin="16,16,16,4"
                                FontSize="10" Opacity="0.5"

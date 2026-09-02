@@ -174,6 +174,12 @@ public interface INoteSource
     Task<bool> TestConnectionAsync(CancellationToken ct = default);
     Task SyncCourseAsync(string courseId, IProgress<SyncProgress>? progress = null,
         CancellationToken ct = default);
+
+    /// <summary>Securely stores the integration token (spec §46). Never logged.</summary>
+    Task StoreTokenAsync(string token, CancellationToken ct = default);
+
+    /// <summary>True if a token has been stored (used to show connection status in the UI).</summary>
+    Task<bool> HasStoredTokenAsync(CancellationToken ct = default);
 }
 
 public record SyncProgress
