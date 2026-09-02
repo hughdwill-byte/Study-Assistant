@@ -16,6 +16,7 @@ public sealed class NotionConnector : INoteSource
     private readonly ICredentialStore _credentials;
     private readonly IAssessmentPolicyService _policy;
     private readonly INoteIndexer _indexer;
+    private readonly ICourseRepository _courses;
     private readonly ILogger<NotionConnector> _logger;
     private readonly HttpClient _http;
 
@@ -30,11 +31,13 @@ public sealed class NotionConnector : INoteSource
         ICredentialStore credentials,
         IAssessmentPolicyService policy,
         INoteIndexer indexer,
+        ICourseRepository courses,
         ILogger<NotionConnector> logger)
     {
         _credentials = credentials;
         _policy = policy;
         _indexer = indexer;
+        _courses = courses;
         _logger = logger;
 
         _http = new HttpClient();
@@ -125,12 +128,19 @@ public sealed class NotionConnector : INoteSource
     private async Task SyncCourseInternalAsync(
         string courseId, IProgress<SyncProgress>? progress, CancellationToken ct)
     {
-        // The course → root Notion page mapping (courses.notion_root_page_id, spec §45) is provided
-        // by the library layer; until that is wired, callers can drive a page directly via
-        // SyncNotionPageAsync. Here we treat the courseId as the root page id so the pipeline is
-        // exercised end-to-end when a page id is supplied.
-        await SyncNotionPageAsync(courseId, courseId, notionPageId: courseId, progress, ct)
+        // Resolve the course's configured Notion root page (spec §45). The root page id is set when
+        // the user configures the course; without it there is nothing to sync.
+        var course = await _courses.GetAsync(courseId, ct).ConfigureAwait(false);
+        if (course is null || string.IsNullOrWhiteSpace(course.NotionRootPageId))
+        {
+            _logger.LogWarning(
+                "Course {CourseId} has no Notion root page configured; nothing to sync.", courseId);
+            return;
+        }
+
+        await SyncNotionPageAsync(courseId, course.Name, course.NotionRootPageId!, progress, ct)
             .ConfigureAwait(false);
+        await _courses.SetLastSyncedAsync(courseId, DateTimeOffset.UtcNow, ct).ConfigureAwait(false);
     }
 
     /// <summary>

@@ -178,6 +178,10 @@ public partial class App : Application
                         services.BuildServiceProvider()
                             .GetRequiredService<ILogger<LocalSearchIndex>>()));
 
+                // ── Courses (library + Notion root-page mapping, spec §43, §60) ─
+                services.AddSingleton<ICourseRepository>(sp => new CourseRepository(
+                    dbPath, sp.GetRequiredService<ILogger<CourseRepository>>()));
+
                 // ── Indexing pipeline (OCR → normalise → index, spec §50) ────
                 services.AddSingleton<INoteIndexer, NoteIndexer>();
 
