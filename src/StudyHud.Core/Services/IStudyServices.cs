@@ -180,6 +180,20 @@ public interface INoteSource
 
     /// <summary>True if a token has been stored (used to show connection status in the UI).</summary>
     Task<bool> HasStoredTokenAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Lists the pages shared with the integration so the user can add one as a course without
+    /// hunting for its page id (spec §43). Returns an empty list when blocked by policy or when no
+    /// token is stored. Never uploads anything — it only reads the page list.
+    /// </summary>
+    Task<IReadOnlyList<DiscoveredPage>> DiscoverPagesAsync(CancellationToken ct = default);
+}
+
+/// <summary>A page discovered via the note source, offered to the user as a candidate course.</summary>
+public record DiscoveredPage
+{
+    public required string Id { get; init; }
+    public required string Title { get; init; }
 }
 
 public record SyncProgress
