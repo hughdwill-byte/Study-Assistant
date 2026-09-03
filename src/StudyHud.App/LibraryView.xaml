@@ -80,6 +80,14 @@
                 <TextBlock TextWrapping="Wrap" Opacity="0.55" FontSize="11" Margin="0,2,0,0"
                            Text="The root page ID is the 32-character id in the page URL (notion.so/…-&lt;id&gt;). Before an assessment: Sync each course to download and index its notes locally."/>
 
+                <!-- Discover pages -->
+                <TextBlock Text="Discover pages from Notion" Style="{StaticResource SectionHeader}"/>
+                <Button Content="Discover pages" Click="OnDiscoverPages" Style="{StaticResource PrimaryButton}"
+                        HorizontalAlignment="Left"/>
+                <TextBlock TextWrapping="Wrap" Opacity="0.55" FontSize="11" Margin="0,4,0,0"
+                           Text="Lists every page shared with your integration so you can add one as a course with a click — no page IDs to copy. Save your token first."/>
+                <StackPanel x:Name="DiscoveredStack" Margin="0,8,0,0"/>
+
                 <!-- Courses -->
                 <TextBlock Text="Courses" Style="{StaticResource SectionHeader}"/>
                 <StackPanel x:Name="CoursesStack"/>

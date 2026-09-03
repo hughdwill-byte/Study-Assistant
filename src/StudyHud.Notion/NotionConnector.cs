@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using StudyHud.Core.Services;
@@ -84,6 +85,84 @@ public sealed class NotionConnector : INoteSource
 
     public async Task<bool> HasStoredTokenAsync(CancellationToken ct = default)
         => !string.IsNullOrEmpty(await _credentials.RetrieveAsync(CredentialKey, ct));
+
+    // ── Discovery ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Lists pages shared with the integration via the Notion search endpoint (spec §43), following
+    /// pagination. Only page ids and titles are read — nothing is uploaded.
+    /// </summary>
+    public async Task<IReadOnlyList<DiscoveredPage>> DiscoverPagesAsync(CancellationToken ct = default)
+    {
+        if (!_policy.IsOperationAllowed(PolicyOperation.NotionSync))
+        {
+            _logger.LogInformation("Notion discovery blocked: {Reason}",
+                _policy.GetBlockReason(PolicyOperation.NotionSync));
+            return Array.Empty<DiscoveredPage>();
+        }
+
+        var token = await _credentials.RetrieveAsync(CredentialKey, ct);
+        if (string.IsNullOrEmpty(token)) return Array.Empty<DiscoveredPage>();
+        ConfigureAuth(token);
+
+        var pages = new List<DiscoveredPage>();
+        string? cursor = null;
+
+        do
+        {
+            var body = new Dictionary<string, object?>
+            {
+                ["filter"] = new { value = "page", property = "object" },
+                ["page_size"] = 100
+            };
+            if (cursor is not null) body["start_cursor"] = cursor;
+
+            var page = await PostAsync("search", body, ct).ConfigureAwait(false);
+            if (page is null) break;
+
+            if (page.Value.TryGetProperty("results", out var arr) && arr.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var el in arr.EnumerateArray())
+                {
+                    if (el.TryGetProperty("object", out var ob) && ob.GetString() != "page") continue;
+                    if (el.TryGetProperty("archived", out var ar) && ar.ValueKind == JsonValueKind.True) continue;
+                    var id = el.TryGetProperty("id", out var idEl) ? idEl.GetString() : null;
+                    if (string.IsNullOrEmpty(id)) continue;
+                    pages.Add(new DiscoveredPage { Id = id!, Title = ExtractPageTitle(el) });
+                }
+            }
+
+            cursor = page.Value.TryGetProperty("has_more", out var hm) && hm.ValueKind == JsonValueKind.True
+                && page.Value.TryGetProperty("next_cursor", out var nc) && nc.ValueKind == JsonValueKind.String
+                ? nc.GetString()
+                : null;
+        }
+        while (cursor is not null);
+
+        _logger.LogInformation("Notion discovery found {Count} shared page(s).", pages.Count);
+        return pages;
+    }
+
+    private static string ExtractPageTitle(JsonElement page)
+    {
+        if (page.TryGetProperty("properties", out var props) && props.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var prop in props.EnumerateObject())
+            {
+                if (prop.Value.TryGetProperty("type", out var tp) && tp.GetString() == "title"
+                    && prop.Value.TryGetProperty("title", out var arr) && arr.ValueKind == JsonValueKind.Array)
+                {
+                    var sb = new StringBuilder();
+                    foreach (var t in arr.EnumerateArray())
+                        if (t.TryGetProperty("plain_text", out var txt))
+                            sb.Append(txt.GetString());
+                    var s = sb.ToString().Trim();
+                    if (s.Length > 0) return s;
+                }
+            }
+        }
+        return "Untitled";
+    }
 
     // ── Sync ────────────────────────────────────────────────────────────────
 
@@ -330,6 +409,16 @@ public sealed class NotionConnector : INoteSource
     private async Task<JsonElement?> GetAsync(string path, CancellationToken ct)
     {
         var resp = await _http.GetAsync($"{NotionApiBase}/{path}", ct);
+        resp.EnsureSuccessStatusCode();
+        var json = await resp.Content.ReadAsStringAsync(ct);
+        return JsonSerializer.Deserialize<JsonElement>(json);
+    }
+
+    private async Task<JsonElement?> PostAsync(string path, object body, CancellationToken ct)
+    {
+        using var content = new StringContent(
+            JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+        var resp = await _http.PostAsync($"{NotionApiBase}/{path}", content, ct);
         resp.EnsureSuccessStatusCode();
         var json = await resp.Content.ReadAsStringAsync(ct);
         return JsonSerializer.Deserialize<JsonElement>(json);

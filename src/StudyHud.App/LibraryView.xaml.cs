@@ -235,6 +235,110 @@ public partial class LibraryView : UserControl
         }
     }
 
+    private async void OnDiscoverPages(object sender, RoutedEventArgs e)
+    {
+        if (_policy.IsAssessmentModeActive)
+        {
+            SetStatus("Page discovery is disabled in Assessment Mode.");
+            return;
+        }
+
+        SetStatus("Discovering pages shared with your integration…");
+        try
+        {
+            var pages = await _notes.DiscoverPagesAsync();
+            DiscoveredStack.Children.Clear();
+
+            if (pages.Count == 0)
+            {
+                DiscoveredStack.Children.Add(new TextBlock
+                {
+                    Text = "No pages found. Save your token first, and make sure you've shared the "
+                         + "pages with your integration in Notion (••• → Connections).",
+                    Opacity = 0.6,
+                    TextWrapping = TextWrapping.Wrap
+                });
+                SetStatus("No shared pages found.");
+                return;
+            }
+
+            foreach (var p in pages)
+                DiscoveredStack.Children.Add(BuildDiscoveredRow(p));
+
+            SetStatus($"Found {pages.Count} shared page(s). Click “Add as course” on the ones you want.");
+        }
+        catch (Exception ex)
+        {
+            SetStatus("Discovery failed: " + ex.Message);
+            _logger.LogWarning(ex, "Notion page discovery failed.");
+        }
+    }
+
+    private UIElement BuildDiscoveredRow(DiscoveredPage page)
+    {
+        var border = new Border
+        {
+            Background = Brush("SecondaryBackground", Color.FromArgb(180, 40, 40, 48)),
+            BorderBrush = Brush("PanelBorder", Color.FromRgb(60, 60, 70)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(4),
+            Margin = new Thickness(0, 0, 0, 6),
+            Padding = new Thickness(12, 8, 12, 8)
+        };
+
+        var dock = new DockPanel();
+
+        var addBtn = new Button
+        {
+            Content = "Add as course",
+            Padding = new Thickness(12, 4, 12, 4),
+            Background = Brush("Accent", Color.FromRgb(0, 180, 255)),
+            Foreground = System.Windows.Media.Brushes.White,
+            BorderThickness = new Thickness(0),
+            Cursor = System.Windows.Input.Cursors.Hand,
+            IsEnabled = !_policy.IsAssessmentModeActive
+        };
+        addBtn.Click += (_, _) => _ = AddDiscoveredAsync(page);
+        DockPanel.SetDock(addBtn, Dock.Right);
+        dock.Children.Add(addBtn);
+
+        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        text.Children.Add(new TextBlock { Text = page.Title, FontWeight = FontWeights.SemiBold });
+        text.Children.Add(new TextBlock
+        {
+            Text = page.Id,
+            Opacity = 0.5,
+            FontSize = 11,
+            TextWrapping = TextWrapping.Wrap
+        });
+        dock.Children.Add(text);
+
+        border.Child = dock;
+        return border;
+    }
+
+    private async Task AddDiscoveredAsync(DiscoveredPage page)
+    {
+        var course = new Course
+        {
+            CourseId = $"{Slug(page.Title)}-{Guid.NewGuid().ToString("N")[..6]}",
+            Name = page.Title,
+            NotionRootPageId = page.Id
+        };
+
+        try
+        {
+            await _courses.UpsertAsync(course);
+            SetStatus($"Added “{page.Title}”. Click Sync on it to index its notes.");
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Could not add “{page.Title}”: {ex.Message}");
+            _logger.LogWarning(ex, "Adding discovered course failed.");
+        }
+    }
+
     private async Task SyncCourseAsync(Course course)
     {
         if (_policy.IsAssessmentModeActive)
