@@ -45,8 +45,19 @@ public static class FeatureExtractor
         @"will|would|could|should|may|might|shall|can|to|of|in|on|at|by|for|" +
         @"with|from|into|through|during|before|after|above|below|and|or|but|" +
         @"if|then|so|yet|nor|both|either|neither|not|only|also|just|this|that|" +
+        @"when|where|which|who|whom|whose|what|why|how|" +
         @"these|those|its|it|he|she|they|we|you|i)\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // A run of 2+ letters (Latin or Greek) — a candidate compound expression such as "My" in
+    // "My/I". Only decomposed into individual variables when it sits in a math context (spec §51).
+    private static readonly Regex LetterClusterPattern = new(
+        @"[A-Za-zσεταβγδθφωρμλΔ]{2,}",
+        RegexOptions.Compiled);
+
+    // Characters that mark an expression context around a letter cluster.
+    private static readonly char[] MathContextChars =
+        ['=', '/', '*', '+', '-', '^', '(', ')', '·', '×', '≈', '<', '>', '≤', '≥'];
 
     public static ExtractedFeatures Extract(string normalisedText)
     {
@@ -106,11 +117,33 @@ public static class FeatureExtractor
     private static IReadOnlyList<string> ExtractVariables(string text)
     {
         var found = new HashSet<string>();
+
+        // Pass 1: isolated single-letter variables (e.g. "M = 3.2").
         foreach (Match m in VariablePattern.Matches(text))
         {
             if (CommonVariables.Contains(m.Value))
                 found.Add(m.Value);
         }
+
+        // Pass 2: compound clusters in a math context (e.g. "My/I" → M, y, I). A cluster is only
+        // decomposed when it touches a math operator AND every character is a known variable, so
+        // ordinary prose words are never split (spec §51, §52).
+        foreach (Match m in LetterClusterPattern.Matches(text))
+        {
+            int start = m.Index, end = m.Index + m.Length;
+            char before = start > 0 ? text[start - 1] : ' ';
+            char after = end < text.Length ? text[end] : ' ';
+            bool inMathContext = Array.IndexOf(MathContextChars, before) >= 0
+                              || Array.IndexOf(MathContextChars, after) >= 0;
+            if (!inMathContext) continue;
+
+            if (m.Value.All(ch => CommonVariables.Contains(ch.ToString())))
+            {
+                foreach (char ch in m.Value)
+                    found.Add(ch.ToString());
+            }
+        }
+
         return found.ToList();
     }
 

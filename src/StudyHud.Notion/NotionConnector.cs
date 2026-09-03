@@ -15,6 +15,8 @@ public sealed class NotionConnector : INoteSource
 {
     private readonly ICredentialStore _credentials;
     private readonly IAssessmentPolicyService _policy;
+    private readonly INoteIndexer _indexer;
+    private readonly ICourseRepository _courses;
     private readonly ILogger<NotionConnector> _logger;
     private readonly HttpClient _http;
 
@@ -28,10 +30,14 @@ public sealed class NotionConnector : INoteSource
     public NotionConnector(
         ICredentialStore credentials,
         IAssessmentPolicyService policy,
+        INoteIndexer indexer,
+        ICourseRepository courses,
         ILogger<NotionConnector> logger)
     {
         _credentials = credentials;
         _policy = policy;
+        _indexer = indexer;
+        _courses = courses;
         _logger = logger;
 
         _http = new HttpClient();
@@ -75,6 +81,9 @@ public sealed class NotionConnector : INoteSource
         await _credentials.StoreAsync(CredentialKey, token, ct);
         _logger.LogInformation("Notion token stored securely.");
     }
+
+    public async Task<bool> HasStoredTokenAsync(CancellationToken ct = default)
+        => !string.IsNullOrEmpty(await _credentials.RetrieveAsync(CredentialKey, ct));
 
     // ── Sync ────────────────────────────────────────────────────────────────
 
@@ -122,22 +131,106 @@ public sealed class NotionConnector : INoteSource
     private async Task SyncCourseInternalAsync(
         string courseId, IProgress<SyncProgress>? progress, CancellationToken ct)
     {
-        // Step 1: Retrieve course root page and hierarchy
-        progress?.Report(new SyncProgress { Phase = "Reading Notion structure", CompletedItems = 0, TotalItems = 0 });
+        // Resolve the course's configured Notion root page (spec §45). The root page id is set when
+        // the user configures the course; without it there is nothing to sync.
+        var course = await _courses.GetAsync(courseId, ct).ConfigureAwait(false);
+        if (course is null || string.IsNullOrWhiteSpace(course.NotionRootPageId))
+        {
+            _logger.LogWarning(
+                "Course {CourseId} has no Notion root page configured; nothing to sync.", courseId);
+            return;
+        }
 
-        // NOTE: Full Notion hierarchy traversal implementation goes here.
-        // The schema supports: course → week → page → section → image/text block.
-        // Each block is hashed; unchanged hashes skip re-download and re-OCR.
-        // Image URLs are downloaded promptly before they expire.
-        //
-        // IMPLEMENTATION STATUS: Notion API page traversal is scaffolded.
-        // Full block discovery, image download pipeline, and database upsert 
-        // are implemented in a follow-up phase (Phase 7 per spec §110).
-        //
-        // This connector correctly blocks all operations in Assessment Mode.
+        await SyncNotionPageAsync(courseId, course.Name, course.NotionRootPageId!, progress, ct)
+            .ConfigureAwait(false);
+        await _courses.SetLastSyncedAsync(courseId, DateTimeOffset.UtcNow, ct).ConfigureAwait(false);
+    }
 
-        await Task.Delay(100, ct); // Placeholder for real async work
-        _logger.LogInformation("Notion sync structure for course {CourseId} completed.", courseId);
+    /// <summary>
+    /// Syncs a single Notion page into the local index (spec §45, §50): fetches its block children,
+    /// parses headings/images/text, downloads image bytes promptly (URLs expire), and hands the
+    /// result to the pre-indexing pipeline. Only images are downloaded — never uploaded anywhere.
+    /// </summary>
+    public async Task SyncNotionPageAsync(
+        string courseId, string courseName, string notionPageId,
+        IProgress<SyncProgress>? progress, CancellationToken ct)
+    {
+        progress?.Report(new SyncProgress { Phase = "Reading Notion page", CompletedItems = 0, TotalItems = 0 });
+
+        var blocks = await FetchBlockChildrenAsync(notionPageId, ct).ConfigureAwait(false);
+        var parsed = NotionBlockParser.ParsePage(blocks);
+
+        var pageUrl = $"https://www.notion.so/{notionPageId.Replace("-", "")}";
+        var sources = new List<RawNoteSource>();
+
+        foreach (var block in parsed)
+        {
+            ct.ThrowIfCancellationRequested();
+            byte[]? imageBytes = null;
+            if (block.IsImage)
+            {
+                imageBytes = await TryDownloadAsync(block.ImageUrl!, ct).ConfigureAwait(false);
+                if (imageBytes is null) continue; // expired/unavailable image — skip (spec §69)
+            }
+
+            sources.Add(new RawNoteSource
+            {
+                Id = $"{notionPageId}:{block.BlockId}",
+                PageId = notionPageId,
+                PageName = courseName,
+                HeadingPath = block.HeadingPath,
+                HeadingText = block.HeadingText,
+                NotionPageUrl = pageUrl,
+                NotionBlockId = block.BlockId,
+                ImageBytes = imageBytes,
+                Text = block.IsImage ? null : block.Text
+            });
+        }
+
+        await _indexer.IndexCourseSourcesAsync(courseId, courseName, sources, progress, ct)
+            .ConfigureAwait(false);
+
+        _logger.LogInformation("Synced Notion page {Page}: {Count} note sources.", notionPageId, sources.Count);
+    }
+
+    /// <summary>Fetches all block children of a page, following pagination (spec §45 pagination).</summary>
+    private async Task<List<JsonElement>> FetchBlockChildrenAsync(string pageId, CancellationToken ct)
+    {
+        var results = new List<JsonElement>();
+        string? cursor = null;
+
+        do
+        {
+            var path = $"blocks/{pageId}/children?page_size=100"
+                     + (cursor is null ? "" : $"&start_cursor={Uri.EscapeDataString(cursor)}");
+            var page = await GetAsync(path, ct).ConfigureAwait(false);
+            if (page is null) break;
+
+            if (page.Value.TryGetProperty("results", out var arr) && arr.ValueKind == JsonValueKind.Array)
+                foreach (var el in arr.EnumerateArray())
+                    results.Add(el.Clone()); // detach from the document we are about to dispose
+
+            cursor = page.Value.TryGetProperty("has_more", out var hasMore) && hasMore.ValueKind == JsonValueKind.True
+                && page.Value.TryGetProperty("next_cursor", out var nc) && nc.ValueKind == JsonValueKind.String
+                ? nc.GetString()
+                : null;
+        }
+        while (cursor is not null);
+
+        return results;
+    }
+
+    private async Task<byte[]?> TryDownloadAsync(string url, CancellationToken ct)
+    {
+        try
+        {
+            return await _http.GetByteArrayAsync(url, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to download Notion image (URL may have expired).");
+            return null;
+        }
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -155,40 +248,5 @@ public sealed class NotionConnector : INoteSource
         resp.EnsureSuccessStatusCode();
         var json = await resp.Content.ReadAsStringAsync(ct);
         return JsonSerializer.Deserialize<JsonElement>(json);
-    }
-}
-
-/// <summary>
-/// Windows Credential Manager implementation of ICredentialStore (spec §46).
-/// Uses DPAPI-backed Windows Credential Manager. Token never written to logs or files.
-/// </summary>
-public sealed class WindowsCredentialStore : ICredentialStore
-{
-    private readonly ILogger<WindowsCredentialStore> _logger;
-
-    public WindowsCredentialStore(ILogger<WindowsCredentialStore> logger)
-    {
-        _logger = logger;
-    }
-
-    public Task StoreAsync(string key, string secret, CancellationToken ct = default)
-    {
-        // Windows Credential Manager via CredWrite
-        // Simplified: uses a local encrypted file with DPAPI until full WCM integration
-        // In production, this must use CredWrite/CredRead P/Invoke or a WCM wrapper library
-        _logger.LogDebug("Credential stored for key '{Key}'.", key);
-        return Task.CompletedTask;
-    }
-
-    public Task<string?> RetrieveAsync(string key, CancellationToken ct = default)
-    {
-        _logger.LogDebug("Credential retrieved for key '{Key}'.", key);
-        return Task.FromResult<string?>(null);
-    }
-
-    public Task DeleteAsync(string key, CancellationToken ct = default)
-    {
-        _logger.LogDebug("Credential deleted for key '{Key}'.", key);
-        return Task.CompletedTask;
     }
 }

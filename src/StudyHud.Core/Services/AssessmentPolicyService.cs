@@ -11,6 +11,7 @@ namespace StudyHud.Core.Services;
 public sealed class AssessmentPolicyService : IAssessmentPolicyService
 {
     private readonly ILogger<AssessmentPolicyService> _logger;
+    private readonly IApplicationStateService? _appState;
     private volatile bool _assessmentActive;
 
     /// <summary>
@@ -38,9 +39,28 @@ public sealed class AssessmentPolicyService : IAssessmentPolicyService
         [PolicyOperation.UpdateCheck] = "Update checks are blocked while Assessment Mode network policy is active."
     };
 
-    public AssessmentPolicyService(ILogger<AssessmentPolicyService> logger)
+    public AssessmentPolicyService(
+        ILogger<AssessmentPolicyService> logger,
+        IApplicationStateService? appState = null)
     {
         _logger = logger;
+        _appState = appState;
+
+        // ApplicationState is the single source of truth for Assessment Mode. When it changes
+        // (e.g. the user toggles it in the settings window) the policy — the actual enforcement
+        // point every network call checks — must follow, or the toggle would block nothing
+        // (spec §41, §182). One-way sync only: this service never writes back to ApplicationState.
+        if (_appState != null)
+        {
+            _assessmentActive = _appState.Current.AssessmentModeActive;
+            _appState.StateChanged += OnAppStateChanged;
+        }
+    }
+
+    private void OnAppStateChanged(object? sender, ApplicationStateChangedEventArgs e)
+    {
+        if (e.Current.AssessmentModeActive != _assessmentActive)
+            SetAssessmentMode(e.Current.AssessmentModeActive);
     }
 
     public bool IsAssessmentModeActive => _assessmentActive;

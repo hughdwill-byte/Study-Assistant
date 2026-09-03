@@ -19,23 +19,29 @@ public sealed class PanelHost : Canvas
     private readonly MonitorInfo _monitor;
     private readonly IApplicationStateService _appState;
     private readonly IThemeService _theme;
-    private readonly ISearchIndex _searchIndex;
+    private readonly ICaptureService _capture;
+    private readonly IQuestionFinder _finder;
     private readonly IAssessmentPolicyService _policy;
 
     private readonly List<HudPanelBase> _panels = [];
     private ControlCapsule? _capsule;
 
+    /// <summary>The monitor this host renders panels for.</summary>
+    public string MonitorId => _monitor.MonitorId;
+
     public PanelHost(
         MonitorInfo monitor,
         IApplicationStateService appState,
         IThemeService theme,
-        ISearchIndex searchIndex,
+        ICaptureService capture,
+        IQuestionFinder finder,
         IAssessmentPolicyService policy)
     {
         _monitor = monitor;
         _appState = appState;
         _theme = theme;
-        _searchIndex = searchIndex;
+        _capture = capture;
+        _finder = finder;
         _policy = policy;
 
         Background = Brushes.Transparent;
@@ -91,7 +97,7 @@ public sealed class PanelHost : Canvas
                 break;
 
             case WorkspaceId.QuestionFinder:
-                AddPanel(new QuestionFinderPanel(_appState, _theme, _searchIndex), left: 16, top: 80);
+                AddPanel(new QuestionFinderPanel(_appState, _theme, _capture, _finder), left: 16, top: 80);
                 break;
         }
     }

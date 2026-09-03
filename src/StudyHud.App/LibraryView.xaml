@@ -1,0 +1,91 @@
+<UserControl x:Class="StudyHud.App.LibraryView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>
+            <Setter Property="FontFamily" Value="{DynamicResource BodyFontFamily}"/>
+            <Setter Property="FontSize" Value="{DynamicResource BodyFontSize}"/>
+        </Style>
+        <Style x:Key="SectionHeader" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{DynamicResource TitleFontFamily}"/>
+            <Setter Property="FontSize" Value="{DynamicResource TitleFontSize}"/>
+            <Setter Property="Margin" Value="0,18,0,8"/>
+        </Style>
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="Width" Value="150"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Opacity" Value="0.85"/>
+        </Style>
+        <Style x:Key="Row" TargetType="StackPanel">
+            <Setter Property="Orientation" Value="Horizontal"/>
+            <Setter Property="Margin" Value="0,4"/>
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="Width" Value="320"/>
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="PrimaryButton" TargetType="Button">
+            <Setter Property="Height" Value="{DynamicResource ButtonHeight}"/>
+            <Setter Property="Padding" Value="14,0"/>
+            <Setter Property="Background" Value="{DynamicResource Accent}"/>
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="4,0,4,0">
+                <TextBlock Text="Study Library" Style="{StaticResource SectionHeader}" Margin="0,0,0,4"/>
+
+                <Border x:Name="AssessmentBanner" Visibility="Collapsed"
+                        Background="#33CC4422" BorderBrush="#CC4422" BorderThickness="1"
+                        CornerRadius="4" Padding="10,6" Margin="0,4,0,4">
+                    <TextBlock Text="Assessment Mode is active — Notion sync is disabled. Local search still works."
+                               TextWrapping="Wrap"/>
+                </Border>
+
+                <!-- Notion connection -->
+                <TextBlock Text="Notion Connection" Style="{StaticResource SectionHeader}"/>
+                <TextBlock x:Name="ConnectionStatus" Opacity="0.8" Text="Checking…"/>
+                <StackPanel Style="{StaticResource Row}">
+                    <TextBlock Text="Integration token" Style="{StaticResource FieldLabel}"/>
+                    <PasswordBox x:Name="TokenBox" Width="320" Height="26" VerticalContentAlignment="Center"/>
+                    <Button Content="Save token" Click="OnSaveToken" Style="{StaticResource PrimaryButton}" Margin="8,0,0,0"/>
+                    <Button Content="Test" Click="OnTestConnection" Style="{StaticResource PrimaryButton}"
+                            Background="{DynamicResource SecondaryBackground}" Margin="8,0,0,0"/>
+                </StackPanel>
+                <TextBlock TextWrapping="Wrap" Opacity="0.55" FontSize="11" Margin="0,2,0,0"
+                           Text="Create an internal integration at notion.so/my-integrations, share your course pages with it, and paste the secret here. The token is encrypted on this device (DPAPI) and never logged or uploaded."/>
+
+                <!-- Add course -->
+                <TextBlock Text="Add a Course" Style="{StaticResource SectionHeader}"/>
+                <StackPanel Style="{StaticResource Row}">
+                    <TextBlock Text="Name" Style="{StaticResource FieldLabel}"/>
+                    <TextBox x:Name="CourseNameBox"/>
+                </StackPanel>
+                <StackPanel Style="{StaticResource Row}">
+                    <TextBlock Text="Notion root page ID" Style="{StaticResource FieldLabel}"/>
+                    <TextBox x:Name="CourseRootBox"/>
+                </StackPanel>
+                <StackPanel Style="{StaticResource Row}">
+                    <TextBlock Text="Description" Style="{StaticResource FieldLabel}"/>
+                    <TextBox x:Name="CourseDescBox"/>
+                </StackPanel>
+                <Button Content="Add course" Click="OnAddCourse" Style="{StaticResource PrimaryButton}"
+                        HorizontalAlignment="Left" Margin="150,4,0,0"/>
+                <TextBlock TextWrapping="Wrap" Opacity="0.55" FontSize="11" Margin="0,2,0,0"
+                           Text="The root page ID is the 32-character id in the page URL (notion.so/…-&lt;id&gt;). Before an assessment: Sync each course to download and index its notes locally."/>
+
+                <!-- Courses -->
+                <TextBlock Text="Courses" Style="{StaticResource SectionHeader}"/>
+                <StackPanel x:Name="CoursesStack"/>
+
+                <TextBlock x:Name="StatusLabel" Text="" Opacity="0.7" Margin="0,12,0,0" TextWrapping="Wrap"/>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

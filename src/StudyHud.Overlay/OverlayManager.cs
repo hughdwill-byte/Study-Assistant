@@ -15,7 +15,8 @@ public sealed class OverlayManager : IDisposable
     private readonly IMonitorService _monitors;
     private readonly IApplicationStateService _appState;
     private readonly IThemeService _theme;
-    private readonly ISearchIndex _searchIndex;
+    private readonly ICaptureService _capture;
+    private readonly IQuestionFinder _finder;
     private readonly IAssessmentPolicyService _policy;
     private readonly ILogger<OverlayManager> _logger;
     private readonly Dictionary<string, MonitorOverlayWindow> _overlays = new();
@@ -25,14 +26,16 @@ public sealed class OverlayManager : IDisposable
         IMonitorService monitors,
         IApplicationStateService appState,
         IThemeService theme,
-        ISearchIndex searchIndex,
+        ICaptureService capture,
+        IQuestionFinder finder,
         IAssessmentPolicyService policy,
         ILogger<OverlayManager> logger)
     {
         _monitors = monitors;
         _appState = appState;
         _theme = theme;
-        _searchIndex = searchIndex;
+        _capture = capture;
+        _finder = finder;
         _policy = policy;
         _logger = logger;
 
@@ -58,7 +61,7 @@ public sealed class OverlayManager : IDisposable
         var overlay = new MonitorOverlayWindow(monitor, _appState, _logger);
 
         // Create a PanelHost and attach it to the overlay
-        var host = new PanelHost(monitor, _appState, _theme, _searchIndex, _policy);
+        var host = new PanelHost(monitor, _appState, _theme, _capture, _finder, _policy);
         overlay.SetPanelHost(host);
 
         _overlays[monitor.MonitorId] = overlay;
@@ -104,6 +107,40 @@ public sealed class OverlayManager : IDisposable
     }
 
     public IReadOnlyCollection<MonitorOverlayWindow> AllOverlays => _overlays.Values;
+
+    /// <summary>All active panel hosts (one per monitor overlay that has been given a host).</summary>
+    public IEnumerable<PanelHost> PanelHosts =>
+        _overlays.Values
+            .Select(o => o.PanelHost)
+            .Where(h => h is not null)
+            .Select(h => h!);
+
+    /// <summary>
+    /// Aggregates the current on-screen panel layout across every monitor for the given
+    /// workspace, ready to persist via <see cref="ILayoutService"/> (spec §19).
+    /// </summary>
+    public IReadOnlyList<PanelLayout> CollectLayouts(WorkspaceId workspace)
+    {
+        var all = new List<PanelLayout>();
+        foreach (var host in PanelHosts)
+            all.AddRange(host.GetCurrentLayouts(workspace));
+        return all;
+    }
+
+    /// <summary>
+    /// Applies persisted layouts to the correct monitor's panel host (spec §19). Layouts whose
+    /// monitor is not present are ignored here — callers should recover them first via
+    /// <see cref="ILayoutService.RecoverPanelsForCurrentMonitors"/>.
+    /// </summary>
+    public void ApplyLayouts(IReadOnlyList<PanelLayout> layouts)
+    {
+        foreach (var host in PanelHosts)
+        {
+            var forThisMonitor = layouts.Where(l => l.MonitorId == host.MonitorId).ToList();
+            if (forThisMonitor.Count > 0)
+                host.ApplyLayouts(forThisMonitor);
+        }
+    }
 
     public void Dispose()
     {

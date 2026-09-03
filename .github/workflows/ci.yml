@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# One run per ref; a new commit cancels the superseded run instead of doubling up.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore src/StudyHud.sln
+
+      - name: Build (Release, x64)
+        run: dotnet build src/StudyHud.sln -c Release -p:Platform=x64 --no-restore
+
+      - name: Test (Debug, x64)
+        run: dotnet test src/StudyHud.sln -c Debug -p:Platform=x64

@@ -27,6 +27,22 @@ public sealed class HoldToInteractService : IDisposable
     };
 
     private bool _isHeld;
+    private bool _started;
+
+    /// <summary>The keyboard virtual key currently being watched via the input service, if any.</summary>
+    private int? _watchedTriggerKey;
+
+    // Configurable global hotkeys (defaults match spec §7). Overridden by ApplySettings.
+    private HotkeyBinding _panicHide = new()
+    {
+        Modifiers = ModifierKeys.Control | ModifierKeys.Shift,
+        VirtualKey = 0x48 // H
+    };
+    private HotkeyBinding _toggleEditMode = new()
+    {
+        Modifiers = ModifierKeys.Control | ModifierKeys.Shift,
+        VirtualKey = 0x45 // E
+    };
 
     // Hotkey IDs
     private const int HotkeyIdPanicHide = 1001;
@@ -44,28 +60,84 @@ public sealed class HoldToInteractService : IDisposable
 
     public void Start()
     {
+        if (_started) return;
+        _started = true;
+
         _input.InputReceived += OnInputReceived;
-
-        // Register Panic Hide: Ctrl+Shift+H (configurable in Settings)
-        _input.RegisterHotKey(HotkeyIdPanicHide, ModifierKeys.Control | ModifierKeys.Shift, 0x48); // H
-
-        // Register Edit Mode toggle: Ctrl+Shift+E
-        _input.RegisterHotKey(HotkeyIdToggleEditMode, ModifierKeys.Control | ModifierKeys.Shift, 0x45); // E
+        RegisterConfiguredHotkeys();
+        SyncKeyboardWatch();
 
         _logger.LogInformation("HoldToInteractService started. Trigger: {Trigger}.", _trigger);
     }
 
     public void Stop()
     {
+        if (!_started) return;
+        _started = false;
+
         _input.InputReceived -= OnInputReceived;
         _input.UnregisterHotKey(HotkeyIdPanicHide);
         _input.UnregisterHotKey(HotkeyIdToggleEditMode);
+
+        if (_watchedTriggerKey is int watched)
+        {
+            _input.UnwatchKey(watched);
+            _watchedTriggerKey = null;
+        }
+    }
+
+    /// <summary>Watches the trigger key when it is a keyboard key; unwatches a stale one (spec §6).</summary>
+    private void SyncKeyboardWatch()
+    {
+        int? desired = _trigger.Type == TriggerKind.KeyboardKey ? _trigger.VirtualKey : null;
+        if (_watchedTriggerKey == desired) return;
+
+        if (_watchedTriggerKey is int old) _input.UnwatchKey(old);
+        if (desired is int next) _input.WatchKey(next);
+        _watchedTriggerKey = desired;
+    }
+
+    private void RegisterConfiguredHotkeys()
+    {
+        _input.RegisterHotKey(HotkeyIdPanicHide, _panicHide.Modifiers, _panicHide.VirtualKey);
+        _input.RegisterHotKey(HotkeyIdToggleEditMode, _toggleEditMode.Modifiers, _toggleEditMode.VirtualKey);
     }
 
     public void SetTrigger(HoldTriggerConfig trigger)
     {
         _trigger = trigger;
+        if (_started) SyncKeyboardWatch();
         _logger.LogInformation("Hold-to-Interact trigger changed to {Trigger}.", trigger);
+    }
+
+    /// <summary>
+    /// Applies persisted user settings (spec §6, §7): the Hold-to-Interact trigger and the
+    /// panic/edit hotkeys. Safe to call before or after <see cref="Start"/>; if already started,
+    /// the configurable hotkeys are re-registered.
+    /// </summary>
+    public void ApplySettings(StudyHudSettings settings)
+    {
+        _trigger = new HoldTriggerConfig
+        {
+            Type = settings.HoldToInteract.Type == HoldTriggerType.MouseButton
+                ? TriggerKind.MouseButton
+                : TriggerKind.KeyboardKey,
+            VirtualKey = settings.HoldToInteract.VirtualKey,
+            MouseButton = settings.HoldToInteract.MouseButton
+        };
+        _panicHide = settings.PanicHideHotkey;
+        _toggleEditMode = settings.ToggleEditModeHotkey;
+
+        if (_started)
+        {
+            // Re-register configurable hotkeys with their new bindings.
+            _input.UnregisterHotKey(HotkeyIdPanicHide);
+            _input.UnregisterHotKey(HotkeyIdToggleEditMode);
+            RegisterConfiguredHotkeys();
+            SyncKeyboardWatch();
+        }
+
+        _logger.LogInformation("Hold-to-Interact settings applied. Trigger: {Trigger}.", _trigger);
     }
 
     private void OnInputReceived(object? sender, GlobalInputEventArgs e)
@@ -95,6 +167,14 @@ public sealed class HoldToInteractService : IDisposable
         // ── Mouse side-button trigger ─────────────────────────────────────
         if (_trigger.Type == TriggerKind.MouseButton
             && e.IsMouseButton && e.MouseButton == _trigger.MouseButton)
+        {
+            HandleTriggerStateChange(e.IsDown);
+        }
+
+        // ── Keyboard-key trigger ──────────────────────────────────────────
+        if (_trigger.Type == TriggerKind.KeyboardKey
+            && e.EventType == GlobalInputEventType.KeyboardKey
+            && e.VirtualKey == _trigger.VirtualKey)
         {
             HandleTriggerStateChange(e.IsDown);
         }

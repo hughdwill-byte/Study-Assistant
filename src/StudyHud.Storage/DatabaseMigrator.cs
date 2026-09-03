@@ -13,7 +13,7 @@ public sealed class DatabaseMigrator
     private readonly string _dbPath;
     private readonly ILogger<DatabaseMigrator> _logger;
 
-    private const int CurrentSchemaVersion = 1;
+    private const int CurrentSchemaVersion = 2;
 
     public DatabaseMigrator(string dbPath, ILogger<DatabaseMigrator> logger)
     {
@@ -38,6 +38,7 @@ public sealed class DatabaseMigrator
         _logger.LogInformation("Current schema version: {Version}.", version);
 
         if (version < 1) await ApplyMigration1Async(conn, ct);
+        if (version < 2) await ApplyMigration2Async(conn, ct);
 
         await ExecuteAsync(conn, $"PRAGMA user_version={CurrentSchemaVersion};", ct);
         _logger.LogInformation("Database at version {Version}.", CurrentSchemaVersion);
@@ -47,8 +48,10 @@ public sealed class DatabaseMigrator
     {
         _logger.LogInformation("Applying migration 1: initial schema.");
 
-        // All DDL in one transaction
-        using var tx = conn.BeginTransaction();
+        // All DDL in one transaction. Driven with raw BEGIN/COMMIT rather than a SqliteTransaction
+        // object so the individual DDL commands need not each be associated with it (Microsoft.Data
+        // .Sqlite rejects a command run under an active SqliteTransaction it is not attached to).
+        await ExecuteAsync(conn, "BEGIN", ct);
         try
         {
             // Courses
@@ -184,12 +187,45 @@ public sealed class DatabaseMigrator
             await ExecuteAsync(conn, ct,
                 "CREATE INDEX IF NOT EXISTS idx_sync_state_course ON sync_state(course_id)");
 
-            tx.Commit();
+            await ExecuteAsync(conn, "COMMIT", ct);
             _logger.LogInformation("Migration 1 applied successfully.");
         }
         catch
         {
-            tx.Rollback();
+            await ExecuteAsync(conn, "ROLLBACK", ct);
+            throw;
+        }
+    }
+
+    private async Task ApplyMigration2Async(SqliteConnection conn, CancellationToken ct)
+    {
+        _logger.LogInformation("Applying migration 2: standalone FTS5 index.");
+
+        // Migration 1 created note_fts as an external-content FTS5 table keyed on note_items'
+        // integer rowid, which is fragile to populate and mismatched the TEXT primary key used
+        // by the read path. Replace it with a self-contained FTS5 table that stores its own copy
+        // of the searchable text plus an UNINDEXED note_item_id, so it can be populated/deleted by
+        // id and joined cleanly to note_items.id (spec §49, §54). The index holds no data yet, so
+        // dropping and recreating it loses nothing.
+        await ExecuteAsync(conn, "BEGIN", ct);
+        try
+        {
+            await ExecuteAsync(conn, ct, "DROP TABLE IF EXISTS note_fts");
+            await ExecuteAsync(conn, ct, """
+                CREATE VIRTUAL TABLE note_fts USING fts5(
+                    ocr_normalised,
+                    heading_path,
+                    page_name,
+                    note_item_id UNINDEXED,
+                    tokenize='unicode61 remove_diacritics 1'
+                )
+                """);
+            await ExecuteAsync(conn, "COMMIT", ct);
+            _logger.LogInformation("Migration 2 applied successfully.");
+        }
+        catch
+        {
+            await ExecuteAsync(conn, "ROLLBACK", ct);
             throw;
         }
     }

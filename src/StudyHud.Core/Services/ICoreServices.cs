@@ -14,6 +14,16 @@ public interface IGlobalInputService : IDisposable
     void RegisterHotKey(int id, ModifierKeys modifiers, int virtualKey);
     void UnregisterHotKey(int id);
 
+    /// <summary>
+    /// Starts reporting down/up transitions for this virtual key via <see cref="InputReceived"/>
+    /// (used for keyboard Hold-to-Interact triggers — spec §6). Keys that are not watched are
+    /// never observed or enqueued, so ordinary typing does not flow through the service.
+    /// </summary>
+    void WatchKey(int virtualKey);
+
+    /// <summary>Stops reporting the given virtual key.</summary>
+    void UnwatchKey(int virtualKey);
+
     Task StartAsync(CancellationToken cancellationToken = default);
     Task StopAsync(CancellationToken cancellationToken = default);
 }
@@ -43,7 +53,8 @@ public class GlobalInputEventArgs : EventArgs
 public enum GlobalInputEventType
 {
     HotKey,
-    MouseButton
+    MouseButton,
+    KeyboardKey
 }
 
 // ---------------------------------------------------------------------------
