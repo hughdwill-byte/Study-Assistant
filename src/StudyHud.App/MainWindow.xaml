@@ -82,8 +82,8 @@
                     <Button Content="Workspaces" Margin="8,2"
                             Click="OnSwitchWorkspaceNoteTaking"/>
                     <Button Content="Courses" Margin="8,2" Click="OnShowLibrary"/>
-                    <Button Content="Macros" Margin="8,2"/>
-                    <Button Content="Layouts" Margin="8,2"/>
+                    <Button Content="Macros" Margin="8,2" Click="OnShowMacros"/>
+                    <Button Content="Layouts" Margin="8,2" Click="OnShowLayouts"/>
 
                     <TextBlock Text="STUDY LIBRARY" Margin="16,16,16,4"
                                FontSize="10" Opacity="0.5"

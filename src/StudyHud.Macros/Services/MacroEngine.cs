@@ -79,6 +79,19 @@ public sealed class MacroEngine : IDisposable, IMacroProfileSwitcher
         _logger.LogInformation("Macro profile switched to {ProfileId}.", profileId);
     }
 
+    // ── Read-only state (for the settings UI) ────────────────────────────────
+    // Macros/profiles are loaded once at startup and not mutated at runtime, so snapshotting the
+    // values for display is safe to read from the UI thread.
+
+    /// <summary>All loaded macro definitions.</summary>
+    public IReadOnlyList<MacroDefinition> Macros => _macros.Values.ToList();
+
+    /// <summary>All loaded macro profiles.</summary>
+    public IReadOnlyList<MacroProfile> Profiles => _profiles.Values.ToList();
+
+    /// <summary>The currently active profile id, or empty if none.</summary>
+    public string ActiveProfileId => _activeProfileId;
+
     // ── Trigger evaluation (called from input pipeline) ─────────────────────
 
     /// <summary>
