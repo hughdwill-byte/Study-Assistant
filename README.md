@@ -16,7 +16,8 @@ using any generative AI.
 This is the simple path: grab the prebuilt app and double‑click it. **You do not need to install
 .NET, Visual Studio, or anything else** — the download is a self‑contained Windows app.
 
-1. Open the **[latest release](https://github.com/hughdwill-byte/Study-Assistant/releases/latest)**.
+1. Open the **[Releases page](https://github.com/hughdwill-byte/Study-Assistant/releases)** — the
+   newest version is at the top.
 2. Under **Assets**, download **`StudyHud-<version>-win-x64.zip`**.
 3. In File Explorer, **right‑click the zip → Extract All…** into a folder you'll keep
    (for example `C:\StudyHud`). *Don't run it from inside the zip.*
@@ -51,8 +52,8 @@ The easy way:
 
 1. **Quit Study HUD completely** (close the settings window, then end any `StudyHud.exe` in Task
    Manager — see the note above).
-2. Open the **[latest release](https://github.com/hughdwill-byte/Study-Assistant/releases/latest)**
-   and download the new **`StudyHud-<version>-win-x64.zip`**.
+2. Open the **[Releases page](https://github.com/hughdwill-byte/Study-Assistant/releases)** (newest
+   at the top) and download the new **`StudyHud-<version>-win-x64.zip`**.
 3. **Extract it over your existing folder** and choose **Replace** when Windows asks — or just
    extract to a brand‑new folder and run the new `StudyHud.exe` from there. Either works.
 4. Double‑click the new `StudyHud.exe`. (SmartScreen may prompt once more for the new version —
