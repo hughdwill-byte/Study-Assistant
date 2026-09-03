@@ -5,80 +5,71 @@ macros, one‑gesture screenshot capture, multi‑monitor layouts, and a **deter
 Finder** that searches your own locally‑indexed Notion notes — **without** generating answers or
 using any generative AI.
 
-> **Status: early / build‑from‑source.** There is no installer or prebuilt release yet. You build
-> and run it from source with the .NET 8 SDK. It targets Windows only (WPF + Win32).
+> **Status: early preview.** It runs, but it's rough and unsigned. The easiest way to use it is to
+> **download the prebuilt app** (below) — no coding required. Developers can also
+> [build from source](#build-from-source-developers). Windows only (WPF + Win32).
 
 ---
 
-## What you need
+## Download and run (easiest — no build needed)
 
-- **Windows 11 or 10, 64‑bit.**
-- **[.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)** (x64). Check with `dotnet --info`
-  — you want an 8.0.x SDK.
-- One of:
-  - **Visual Studio 2022** (17.8+) with the *.NET desktop development* workload, **or**
-  - **JetBrains Rider**, **or**
-  - just the **command line** (`dotnet` CLI).
-- **Git** (to clone the repo).
-- Optional, for the note search: a **Notion account** and an *internal integration* token (see
-  [Connect your Notion notes](#connect-your-notion-notes)).
+This is the simple path: grab the prebuilt app and double‑click it. **You do not need to install
+.NET, Visual Studio, or anything else** — the download is a self‑contained Windows app.
 
-The Question Finder uses **Windows' built‑in OCR**. If OCR finds no text, install an OCR language
-pack: *Settings → Time & language → Language & region →* your language *→ Language options →*
-install the *Basic typing / OCR* feature.
+1. Open the **[latest release](https://github.com/hughdwill-byte/Study-Assistant/releases/latest)**.
+2. Under **Assets**, download **`StudyHud-<version>-win-x64.zip`**.
+3. In File Explorer, **right‑click the zip → Extract All…** into a folder you'll keep
+   (for example `C:\StudyHud`). *Don't run it from inside the zip.*
+4. Open that folder and **double‑click `StudyHud.exe`**.
+5. **First launch:** Windows may show *"Windows protected your PC"* (SmartScreen — the app isn't
+   code‑signed yet). Click **More info → Run anyway**. You only do this once per version.
 
----
+That's it. When it starts you'll see two things:
 
-## Get the code
-
-```powershell
-git clone https://github.com/hughdwill-byte/Study-Assistant.git
-cd Study-Assistant
-```
-
-The solution lives in the `src` folder.
-
----
-
-## Build
-
-The solution is **x64‑only**, so pass the x64 platform.
-
-**Command line:**
-
-```powershell
-cd src
-dotnet restore StudyHud.sln
-dotnet build StudyHud.sln -c Debug -p:Platform=x64
-```
-
-**Visual Studio:** open `src/StudyHud.sln`, make sure the configuration dropdown shows **Debug | x64**,
-and build (Ctrl+Shift+B).
-
----
-
-## Run
-
-**Visual Studio / Rider:** set **StudyHud.App** as the startup project and press **F5**.
-
-**Command line** — build first (above), then launch the app the build produced:
-
-```powershell
-# from the src folder
-.\StudyHud.App\bin\x64\Debug\net8.0-windows\StudyHud.exe
-```
-
-(`dotnet run` also works but must be told the platform:
-`dotnet run --project StudyHud.App/StudyHud.App.csproj -c Debug -p:Platform=x64`.)
-
-When it starts you'll see two things:
-
-1. The **Study HUD settings window** (this is where you manage everything).
+1. The **Study HUD settings window** — where you manage everything.
 2. The **HUD overlay** on your screen(s), in **Ghost mode** — visible but click‑through, so it
-   doesn't get in your way.
+   stays out of your way.
 
-Closing the settings window does **not** quit the app — the HUD keeps running. Quit from the
-settings window / your IDE when you're done.
+> **Closing the settings window does *not* quit the app** — the HUD keeps running in the background.
+> To fully quit (e.g. before updating), close the settings window and then end any remaining
+> **`StudyHud.exe`** in **Task Manager** (Ctrl+Shift+Esc → Details).
+
+**For the Question Finder's text recognition (OCR)** you may need a Windows OCR language pack. If a
+capture finds no text, install it via *Settings → Time & language → Language & region →* your
+language *→ Language options → Basic typing / OCR*.
+
+Requires **Windows 10 or 11, 64‑bit**.
+
+---
+
+## Updating
+
+Study HUD is a **portable app** — there's no installer, so updating just means swapping in the newer
+files. **Your data is never touched by an update** (see [below](#your-data-is-safe-across-updates)).
+
+The easy way:
+
+1. **Quit Study HUD completely** (close the settings window, then end any `StudyHud.exe` in Task
+   Manager — see the note above).
+2. Open the **[latest release](https://github.com/hughdwill-byte/Study-Assistant/releases/latest)**
+   and download the new **`StudyHud-<version>-win-x64.zip`**.
+3. **Extract it over your existing folder** and choose **Replace** when Windows asks — or just
+   extract to a brand‑new folder and run the new `StudyHud.exe` from there. Either works.
+4. Double‑click the new `StudyHud.exe`. (SmartScreen may prompt once more for the new version —
+   *More info → Run anyway*.)
+
+To check which version you have, look at the release you downloaded, or the `StudyHud.exe` file's
+*Properties → Details*.
+
+### Your data is safe across updates
+
+Your courses, note index, settings, saved layouts, and Notion token all live **separately from the
+app**, under `%LOCALAPPDATA%\StudyHud\` (see [Where your data lives](#where-your-data-lives)).
+Replacing the app files **does not delete or change any of it** — you can update as often as you like
+without re‑syncing your notes or re‑entering your token.
+
+*Tip:* if you'd rather keep old versions around, extract each release into its own folder
+(`StudyHud-0.1.0`, `StudyHud-0.2.0`, …) and just run the newest — they all share the same data folder.
 
 ---
 
@@ -155,7 +146,8 @@ It does **not** touch Windows networking or other apps.
 
 ## Where your data lives
 
-Everything is local, under `%LOCALAPPDATA%\StudyHud\`:
+Everything is local, under `%LOCALAPPDATA%\StudyHud\` (paste that into the File Explorer address bar
+to open it):
 
 | Path | What |
 |------|------|
@@ -165,34 +157,76 @@ Everything is local, under `%LOCALAPPDATA%\StudyHud\`:
 | `creds\` | Your Notion token, encrypted with Windows DPAPI. |
 | `Logs\` | Local‑only diagnostic logs (no tokens, note text, or screenshots). |
 
-To **reset** the app completely, quit it and delete the `%LOCALAPPDATA%\StudyHud` folder.
+This folder is **separate from the app**, so updating the app never affects it. To **reset** the app
+completely, quit it and delete the whole `%LOCALAPPDATA%\StudyHud` folder.
 
 ---
 
-## Run the tests (optional)
+## Troubleshooting
+
+- **SmartScreen blocks it / "Windows protected your PC"** — expected; the app isn't code‑signed.
+  Click **More info → Run anyway**.
+- **Question Finder finds no text** — install a Windows OCR language pack (see
+  [Download and run](#download-and-run-easiest--no-build-needed)).
+- **HUD isn't visible** — press **Ctrl + Shift + H** (you may have Panic‑hidden it). Check the app is
+  still running (closing the settings window doesn't quit it).
+- **"Could not connect" to Notion** — check the token, that you **shared** the pages with the
+  integration, and that Assessment Mode is off.
+- **Macros/typing don't work in another app** — a non‑elevated app can't send input to an elevated
+  (admin) app. Run the target app without admin, or Study HUD with matching elevation.
+- **Something's wrong at startup** — see the newest file in `%LOCALAPPDATA%\StudyHud\Logs\`.
+- **(Building from source) build fails with a platform error** — you forgot `-p:Platform=x64` (or the
+  VS dropdown isn't on *x64*). The solution has no *Any CPU* configuration.
+
+---
+
+## Build from source (developers)
+
+Prefer to compile it yourself, or want to contribute? You'll need:
+
+- **Windows 11 or 10, 64‑bit.**
+- **[.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)** (x64). Check with `dotnet --info`
+  — you want an 8.0.x SDK.
+- One of: **Visual Studio 2022** (17.8+) with the *.NET desktop development* workload,
+  **JetBrains Rider**, or just the **`dotnet` CLI**.
+- **Git**.
+
+```powershell
+git clone https://github.com/hughdwill-byte/Study-Assistant.git
+cd Study-Assistant/src
+dotnet restore StudyHud.sln
+dotnet build StudyHud.sln -c Debug -p:Platform=x64
+```
+
+The solution is **x64‑only**, so always pass `-p:Platform=x64` (there is no *Any CPU* configuration).
+
+**Run it:**
+
+```powershell
+# from the src folder, after building
+.\StudyHud.App\bin\x64\Debug\net8.0-windows\StudyHud.exe
+```
+
+In Visual Studio / Rider, set **StudyHud.App** as the startup project (configuration **Debug | x64**)
+and press **F5**. (`dotnet run --project StudyHud.App/StudyHud.App.csproj -c Debug -p:Platform=x64`
+also works.)
+
+**Run the tests:**
 
 ```powershell
 cd src
 dotnet test StudyHud.sln -c Debug -p:Platform=x64
 ```
 
----
+**Produce a release build like the download** (self‑contained single file):
 
-## Troubleshooting
+```powershell
+dotnet publish src/StudyHud.App/StudyHud.App.csproj -c Release -r win-x64 --self-contained true `
+  -p:Platform=x64 -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+```
 
-- **Build fails with a platform error** — you forgot `-p:Platform=x64` (or the VS dropdown isn't on
-  *x64*). The solution has no *Any CPU* configuration.
-- **"WindowsDesktop" / WPF errors on build** — install the *.NET desktop development* workload in the
-  Visual Studio Installer, or use the full .NET 8 **SDK** (not just the runtime).
-- **Question Finder finds no text** — install a Windows OCR language pack (see
-  [What you need](#what-you-need)).
-- **HUD isn't visible** — press **Ctrl + Shift + H** (you may have Panic‑hidden it). Check the app is
-  still running (the settings window closing doesn't quit it).
-- **"Could not connect" to Notion** — check the token, that you **shared** the pages with the
-  integration, and that Assessment Mode is off.
-- **Macros/typing don't work in another app** — a non‑elevated app can't send input to an elevated
-  (admin) app. Run the target app without admin, or Study HUD with matching elevation.
-- **Something's wrong at startup** — see the newest file in `%LOCALAPPDATA%\StudyHud\Logs\`.
+Releases are cut automatically by GitHub Actions when a `v*` tag is pushed
+(`.github/workflows/release.yml`).
 
 ---
 
