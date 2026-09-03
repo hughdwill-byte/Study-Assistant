@@ -20,10 +20,17 @@ This is the simple path: grab the prebuilt app and double‑click it. **You do n
    newest version is at the top.
 2. Under **Assets**, download **`StudyHud-<version>-win-x64.zip`**.
 3. In File Explorer, **right‑click the zip → Extract All…** into a folder you'll keep
-   (for example `C:\StudyHud`). *Don't run it from inside the zip.*
-4. Open that folder and **double‑click `StudyHud.exe`**.
+   (for example `C:\StudyHud`). **Extract it outside OneDrive** — Windows often refuses to launch an
+   app from a synced OneDrive folder (*"Windows cannot access the specified device, path or file"*).
+   *Don't run it from inside the zip.*
+4. Open the extracted **`StudyHud`** folder and **double‑click `StudyHud.exe`** (it sits among a set
+   of support files — that's normal).
 5. **First launch:** Windows may show *"Windows protected your PC"* (SmartScreen — the app isn't
    code‑signed yet). Click **More info → Run anyway**. You only do this once per version.
+
+> **If your antivirus blocks it** (e.g. Avast/AVG flag it or make it "disappear"): the app isn't
+> code‑signed, so this is a *false positive*. Restore it from your antivirus's quarantine and add an
+> **exception** for the `StudyHud` folder, then run it again.
 
 That's it. When it starts you'll see two things:
 
@@ -165,6 +172,12 @@ completely, quit it and delete the whole `%LOCALAPPDATA%\StudyHud` folder.
 
 ## Troubleshooting
 
+- **"Windows cannot access the specified device, path or file"** — you're running it from inside
+  OneDrive (or the zip). Extract to a local folder outside OneDrive, e.g. `C:\StudyHud`, and run it
+  from there.
+- **Antivirus blocks it or it "disappears" on launch (Avast/AVG/Defender)** — a false positive on an
+  unsigned app. Restore it from quarantine and add an **exception** for the `StudyHud` folder, then
+  run again.
 - **SmartScreen blocks it / "Windows protected your PC"** — expected; the app isn't code‑signed.
   Click **More info → Run anyway**.
 - **Question Finder finds no text** — install a Windows OCR language pack (see

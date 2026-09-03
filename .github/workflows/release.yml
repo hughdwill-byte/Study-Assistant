@@ -1,7 +1,9 @@
 name: Release
 
-# Builds a self-contained, single-file Windows x64 executable and publishes it as a
-# GitHub Release asset — so users get a downloadable StudyHud.exe instead of compiling.
+# Builds a self-contained Windows x64 app (a folder, not a single self-extracting exe) and
+# publishes it as a GitHub Release asset — so users get a downloadable app instead of compiling.
+# A plain folder build (no PublishSingleFile) avoids the runtime temp-extraction that makes
+# antivirus flag single-file .NET apps, and needs no .NET install on the user's machine.
 #
 # Triggers:
 #   • push a tag like v0.1.0        → cuts the release for that tag
@@ -40,7 +42,7 @@ jobs:
           "version=$($tag.TrimStart('v'))"   >> $env:GITHUB_OUTPUT
           "asset=StudyHud-$tag-win-x64.zip"  >> $env:GITHUB_OUTPUT
 
-      - name: Publish (self-contained, single file, win-x64)
+      - name: Publish (self-contained folder, win-x64)
         shell: pwsh
         run: >
           dotnet publish src/StudyHud.App/StudyHud.App.csproj
@@ -48,21 +50,20 @@ jobs:
           -r win-x64
           --self-contained true
           -p:Platform=x64
-          -p:PublishSingleFile=true
-          -p:IncludeNativeLibrariesForSelfExtract=true
-          -p:EnableCompressionInSingleFile=true
+          -p:PublishSingleFile=false
           -p:DebugType=none
           -p:DebugSymbols=false
-          -o publish
+          -o publish/StudyHud
 
       - name: Package
         shell: pwsh
         run: |
-          # Drop any stray debug symbols, ship the exe + the guide.
-          Remove-Item publish/*.pdb -ErrorAction SilentlyContinue
-          Copy-Item README.md publish/ -ErrorAction SilentlyContinue
-          Compress-Archive -Path publish/* -DestinationPath '${{ steps.ver.outputs.asset }}' -Force
-          Get-ChildItem publish | Format-Table Name, Length
+          # Drop debug symbols, ship the app folder + the guide. The zip contains a single
+          # top-level "StudyHud" folder; the user extracts it and runs StudyHud.exe inside.
+          Remove-Item publish/StudyHud/*.pdb -ErrorAction SilentlyContinue
+          Copy-Item README.md publish/StudyHud/ -ErrorAction SilentlyContinue
+          Compress-Archive -Path publish/StudyHud -DestinationPath '${{ steps.ver.outputs.asset }}' -Force
+          Get-ChildItem publish/StudyHud | Format-Table Name, Length
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
@@ -75,9 +76,15 @@ jobs:
             **Study HUD ${{ steps.ver.outputs.tag }}** — early preview build.
 
             ### Download & run
-            1. Download `${{ steps.ver.outputs.asset }}` below and unzip it.
-            2. Run **`StudyHud.exe`**. No .NET install needed — this is a self-contained x64 build.
+            1. Download `${{ steps.ver.outputs.asset }}` below and unzip it to a local folder
+               **outside OneDrive** (e.g. `C:\StudyHud`).
+            2. Open the extracted **`StudyHud`** folder and run **`StudyHud.exe`**. No .NET install
+               needed — this is a self-contained x64 build.
             3. Windows SmartScreen may warn about an unsigned app: *More info → Run anyway*.
+
+            > **Antivirus note:** the app isn't code-signed, so some antivirus (e.g. Avast) may flag
+            > it as a false positive. If it's blocked, add an exception for the `StudyHud` folder /
+            > `StudyHud.exe` in your antivirus, or restore it from quarantine.
 
             Requires **Windows 10/11 (64-bit)**. For the Question Finder's OCR you may need a
             Windows OCR language pack (Settings → Time & language → Language & region).

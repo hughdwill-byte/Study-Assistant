@@ -215,6 +215,8 @@ public partial class App : Application
                 services.AddTransient<MainWindow>();
                 services.AddTransient<SettingsView>();
                 services.AddTransient<LibraryView>();
+                services.AddTransient<MacrosView>();
+                services.AddTransient<LayoutsView>();
             })
             .Build();
     }

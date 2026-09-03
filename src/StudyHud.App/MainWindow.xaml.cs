@@ -86,6 +86,22 @@ public partial class MainWindow : Window
         PageHost.Content = _libraryView;
     }
 
+    private MacrosView? _macrosView;
+
+    private void OnShowMacros(object sender, RoutedEventArgs e)
+    {
+        _macrosView ??= _services.GetRequiredService<MacrosView>();
+        PageHost.Content = _macrosView;
+    }
+
+    private LayoutsView? _layoutsView;
+
+    private void OnShowLayouts(object sender, RoutedEventArgs e)
+    {
+        _layoutsView ??= _services.GetRequiredService<LayoutsView>();
+        PageHost.Content = _layoutsView;
+    }
+
     private void OnShowHome(object sender, RoutedEventArgs e)
     {
         PageHost.Content = HomeView;
