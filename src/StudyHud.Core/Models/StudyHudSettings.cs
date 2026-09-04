@@ -73,6 +73,9 @@ public record StudyHudSettings
     // ── Presentation (spec §21, §62) ─────────────────────────────────────────
     public string ThemeId { get; init; } = "Default";
 
+    /// <summary>Custom accent colour as "#RRGGBB" (spec §64), or null to use the theme's accent.</summary>
+    public string? AccentColour { get; init; }
+
     /// <summary>Snap distance in logical pixels (spec §11, default ~15).</summary>
     public double SnapDistancePixels { get; init; } = 15;
 

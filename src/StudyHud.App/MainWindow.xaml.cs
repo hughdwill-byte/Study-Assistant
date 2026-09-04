@@ -145,6 +145,14 @@ public partial class MainWindow : Window
         PageHost.Content = _notesView;
     }
 
+    private ThemesView? _themesView;
+
+    private void OnShowThemes(object sender, RoutedEventArgs e)
+    {
+        _themesView ??= _services.GetRequiredService<ThemesView>();
+        PageHost.Content = _themesView;
+    }
+
     private void OnShowHome(object sender, RoutedEventArgs e)
     {
         PageHost.Content = HomeView;

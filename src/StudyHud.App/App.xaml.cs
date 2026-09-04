@@ -65,9 +65,10 @@ public partial class App : Application
             var settingsStore = _host.Services.GetRequiredService<ISettingsStore>();
             var settings = await settingsStore.LoadAsync();
 
-            // Step 4a: Apply theme from settings
+            // Step 4a: Apply theme (and any custom accent) from settings
             var theme = _host.Services.GetRequiredService<IThemeService>();
             theme.ApplyTheme(settings.ThemeId);
+            ApplyAccentFromSettings(theme, settings.AccentColour);
 
             // Step 4b: Restore session context BEFORE overlays are built so panels populate
             // for the correct workspace and Assessment Mode is enforced from the first frame.
@@ -226,8 +227,27 @@ public partial class App : Application
                 services.AddTransient<MacrosView>();
                 services.AddTransient<LayoutsView>();
                 services.AddTransient<NotesView>();
+                services.AddTransient<ThemesView>();
             })
             .Build();
+    }
+
+    private static void ApplyAccentFromSettings(IThemeService theme, string? accentHex)
+    {
+        if (string.IsNullOrWhiteSpace(accentHex)) return;
+        try
+        {
+            var h = accentHex.TrimStart('#');
+            if (h.Length != 6) return;
+            theme.ApplyAccentColour(System.Drawing.Color.FromArgb(255,
+                Convert.ToByte(h.Substring(0, 2), 16),
+                Convert.ToByte(h.Substring(2, 2), 16),
+                Convert.ToByte(h.Substring(4, 2), 16)));
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Could not apply saved accent colour '{Hex}'.", accentHex);
+        }
     }
 
     private static string GetAppDataDir()
