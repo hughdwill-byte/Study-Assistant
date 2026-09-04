@@ -176,7 +176,7 @@ public sealed class QuestionFinderPanel : HudPanelBase
             SetStatus("Reading question (local OCR)…");
             var result = await _finder.FindFromImageAsync(capture.ImageBytes, SelectedCourseId());
 
-            ShowResults(result.Results);
+            ShowResults(result.Results, result.OcrText);
 
             // Surface low-confidence OCR so the user can see what was detected (spec §59).
             if (result.IsLowConfidence)
@@ -203,18 +203,25 @@ public sealed class QuestionFinderPanel : HudPanelBase
     private static string Truncate(string s, int max)
         => string.IsNullOrEmpty(s) || s.Length <= max ? s : s[..max] + "…";
 
-    private void ShowResults(IReadOnlyList<SearchResult> results)
+    private void ShowResults(IReadOnlyList<SearchResult> results, string ocrText = "")
     {
         _resultsStack.Children.Clear();
 
         if (results.Count == 0)
         {
+            var message = string.IsNullOrWhiteSpace(ocrText)
+                ? "No text was read from the capture. Draw a tighter box around clear text — and make "
+                  + "sure a Windows OCR language pack is installed."
+                : $"No matches yet.\n\nRead from the image:\n“{Truncate(ocrText, 140)}”\n\n"
+                  + "Try drawing around a keyword or heading, and make sure that course is synced.";
+
             _resultsStack.Children.Add(new TextBlock
             {
-                Text = "No strong matches found.",
-                Opacity = 0.6,
+                Text = message,
+                Opacity = 0.7,
                 FontSize = 12,
                 Margin = new Thickness(0, 8, 0, 0),
+                TextWrapping = TextWrapping.Wrap,
                 Foreground = Application.Current.TryFindResource("SecondaryText") as Brush ?? Brushes.Gray
             });
         }
