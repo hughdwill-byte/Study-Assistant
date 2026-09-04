@@ -153,6 +153,14 @@ public partial class MainWindow : Window
         PageHost.Content = _themesView;
     }
 
+    private FocusView? _focusView;
+
+    private void OnShowFocus(object sender, RoutedEventArgs e)
+    {
+        _focusView ??= _services.GetRequiredService<FocusView>();
+        PageHost.Content = _focusView;
+    }
+
     private void OnShowHome(object sender, RoutedEventArgs e)
     {
         PageHost.Content = HomeView;

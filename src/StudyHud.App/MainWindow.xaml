@@ -97,6 +97,7 @@
                                FontSize="10" Opacity="0.5"
                                Foreground="{DynamicResource SecondaryText}"/>
 
+                    <Button Content="Focus" Margin="8,2" Click="OnShowFocus"/>
                     <Button Content="Assessment Mode" Margin="8,2"
                             Click="OnToggleAssessmentMode"/>
                     <Button Content="Themes" Margin="8,2" Click="OnShowThemes"/>
