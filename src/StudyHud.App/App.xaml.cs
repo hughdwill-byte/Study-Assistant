@@ -96,6 +96,17 @@ public partial class App : Application
             holdToInteract.ApplySettings(settings);
             holdToInteract.Start();
 
+            // Step 6c: Apply saved Pomodoro cadence and arm the Quick-Search palette
+            // (Ctrl+Shift+Space) now that global input is live.
+            var pomodoro = _host.Services.GetRequiredService<PomodoroService>();
+            pomodoro.WorkMinutes = settings.FocusMinutes;
+            pomodoro.ShortBreakMinutes = settings.ShortBreakMinutes;
+            pomodoro.LongBreakMinutes = settings.LongBreakMinutes;
+            pomodoro.LongBreakEvery = settings.LongBreakEveryCycles;
+
+            var quickSearch = _host.Services.GetRequiredService<QuickSearchController>();
+            quickSearch.Start();
+
             // Step 7: Start macro engine, then load user macros and route global input to it.
             var macroEngine = _host.Services.GetRequiredService<MacroEngine>();
             macroEngine.Start();
@@ -220,6 +231,10 @@ public partial class App : Application
                 // ── Theming ──────────────────────────────────────────────────
                 services.AddSingleton<IThemeService, ThemeService>();
 
+                // ── Focus Mode (Pomodoro + Quick-Search palette) ─────────────
+                services.AddSingleton<PomodoroService>();
+                services.AddSingleton<QuickSearchController>();
+
                 // ── Windows ──────────────────────────────────────────────────
                 services.AddTransient<MainWindow>();
                 services.AddTransient<SettingsView>();
@@ -228,6 +243,7 @@ public partial class App : Application
                 services.AddTransient<LayoutsView>();
                 services.AddTransient<NotesView>();
                 services.AddTransient<ThemesView>();
+                services.AddTransient<FocusView>();
             })
             .Build();
     }

@@ -82,6 +82,12 @@ public record StudyHudSettings
     /// <summary>Whether the small control capsule is shown (spec §23).</summary>
     public bool ShowControlCapsule { get; init; } = true;
 
+    // ── Focus Mode / Pomodoro ────────────────────────────────────────────────
+    public int FocusMinutes { get; init; } = 25;
+    public int ShortBreakMinutes { get; init; } = 5;
+    public int LongBreakMinutes { get; init; } = 15;
+    public int LongBreakEveryCycles { get; init; } = 4;
+
     // ── Session context (spec §22, §43) ──────────────────────────────────────
     public WorkspaceId CurrentWorkspace { get; init; } = WorkspaceId.NoteTaking;
     public string? CurrentCourseId { get; init; }
