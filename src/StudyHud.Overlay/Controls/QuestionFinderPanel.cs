@@ -305,12 +305,7 @@ public sealed class QuestionFinderPanel : HudPanelBase
             BorderThickness = new Thickness(0),
             Cursor = System.Windows.Input.Cursors.Hand
         };
-        openBtn.Click += (_, _) =>
-        {
-            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                { FileName = result.NotionPageUrl, UseShellExecute = true }); }
-            catch { /* Graceful fail */ }
-        };
+        openBtn.Click += (_, _) => OpenInNotion(result.NotionPageUrl);
 
         stack.Children.Add(headerRow);
         stack.Children.Add(heading);
@@ -318,6 +313,38 @@ public sealed class QuestionFinderPanel : HudPanelBase
         stack.Children.Add(openBtn);
         card.Child = stack;
         return card;
+    }
+
+    /// <summary>
+    /// Opens a note in the Notion desktop app via the <c>notion://</c> deep link, falling back to the
+    /// website in the browser if the app isn't installed / the protocol isn't registered.
+    /// </summary>
+    private static void OpenInNotion(string httpsUrl)
+    {
+        if (string.IsNullOrWhiteSpace(httpsUrl)) return;
+
+        var appUri = httpsUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+            ? "notion://" + httpsUrl["https://".Length..]
+            : httpsUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                ? "notion://" + httpsUrl["http://".Length..]
+                : httpsUrl;
+
+        if (TryStart(appUri)) return;
+        TryStart(httpsUrl); // app not installed — open the website instead
+    }
+
+    private static bool TryStart(string uri)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(
+                new System.Diagnostics.ProcessStartInfo { FileName = uri, UseShellExecute = true });
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private void ShowPreCapture()

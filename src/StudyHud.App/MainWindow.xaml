@@ -122,6 +122,8 @@
                                     Click="OnSwitchWorkspaceNoteTaking"/>
                             <Button Content="Question Finder"
                                     Click="OnSwitchWorkspaceQuestionFinder"/>
+                            <Button Content="Capture Note" Margin="8,0,0,0"
+                                    Click="OnCaptureNote"/>
                             <Button Content="Toggle HUD" Margin="8,0,0,0"
                                     Click="OnToggleHudVisibility"/>
                         </StackPanel>

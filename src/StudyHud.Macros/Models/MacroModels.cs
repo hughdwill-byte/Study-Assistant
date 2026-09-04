@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using StudyHud.Core.Models;
 
 namespace StudyHud.Macros.Models;
@@ -89,6 +90,7 @@ public record DelayAction : MacroAction
 
 public record CaptureRegionAction : MacroAction
 {
+    [SetsRequiredMembers]
     public CaptureRegionAction() => ActionType = MacroActionType.CaptureRegion;
 }
 
@@ -108,6 +110,25 @@ public record TogglePanelCollapseAction : MacroAction
 {
     public TogglePanelCollapseAction() => ActionType = MacroActionType.TogglePanelCollapse;
     public string? PanelId { get; init; } // null = all edge-attached panels
+}
+
+public record ToggleHudAction : MacroAction
+{
+    [SetsRequiredMembers]
+    public ToggleHudAction() => ActionType = MacroActionType.ToggleHud;
+}
+
+public record OpenUrlAction : MacroAction
+{
+    public OpenUrlAction() => ActionType = MacroActionType.OpenUrl;
+    public required string Url { get; init; }
+}
+
+public record LaunchProgramAction : MacroAction
+{
+    public LaunchProgramAction() => ActionType = MacroActionType.LaunchProgram;
+    public required string Path { get; init; }
+    public string? Arguments { get; init; }
 }
 
 // ─── Macro Definition ─────────────────────────────────────────────────────────
