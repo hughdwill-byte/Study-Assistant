@@ -50,25 +50,29 @@ public sealed class ThemeService : IThemeService
                 break;
         }
 
-        // Merge into WPF application resources
-        if (Application.Current != null)
-        {
-            Application.Current.Dispatcher.Invoke(() =>
-            {
-                var existing = Application.Current.Resources.MergedDictionaries
-                    .FirstOrDefault(d => d.Contains("__StudyHudTheme"));
-                if (existing != null)
-                    Application.Current.Resources.MergedDictionaries.Remove(existing);
-
-                var copy = new ResourceDictionary { { "__StudyHudTheme", true } };
-                foreach (var key in _resources.Keys)
-                    copy[key] = _resources[key];
-                Application.Current.Resources.MergedDictionaries.Add(copy);
-            });
-        }
+        PublishToApplication();
 
         _logger.LogDebug("Theme applied: {ThemeId}.", themeId);
         ThemeChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Republishes the current token set into the live WPF application resources.</summary>
+    private void PublishToApplication()
+    {
+        if (Application.Current == null) return;
+
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            var existing = Application.Current.Resources.MergedDictionaries
+                .FirstOrDefault(d => d.Contains("__StudyHudTheme"));
+            if (existing != null)
+                Application.Current.Resources.MergedDictionaries.Remove(existing);
+
+            var copy = new ResourceDictionary { { "__StudyHudTheme", true } };
+            foreach (var key in _resources.Keys)
+                copy[key] = _resources[key];
+            Application.Current.Resources.MergedDictionaries.Add(copy);
+        });
     }
 
     private void ApplyTokenSet(ThemeTokenSet tokens)
@@ -127,6 +131,7 @@ public sealed class ThemeService : IThemeService
         fgBrush.Freeze();
         _resources["AccentForeground"] = fgBrush;
 
+        PublishToApplication(); // so DynamicResource consumers pick up the new accent live
         ThemeChanged?.Invoke(this, EventArgs.Empty);
     }
 
