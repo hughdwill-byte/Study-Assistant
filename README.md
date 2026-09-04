@@ -218,7 +218,7 @@ The solution is **x64‑only**, so always pass `-p:Platform=x64` (there is no *A
 
 ```powershell
 # from the src folder, after building
-.\StudyHud.App\bin\x64\Debug\net8.0-windows\StudyHud.exe
+.\StudyHud.App\bin\x64\Debug\net8.0-windows10.0.19041.0\StudyHud.exe
 ```
 
 In Visual Studio / Rider, set **StudyHud.App** as the startup project (configuration **Debug | x64**)

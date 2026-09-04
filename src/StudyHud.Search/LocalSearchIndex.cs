@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using StudyHud.Core.Services;
@@ -59,7 +60,20 @@ public sealed class LocalSearchIndex : ISearchIndex
 
             // journal_mode (WAL) is a persistent database property set once by the migrator; a
             // read-only connection must not (and cannot) set it, so we just read (spec §49).
-            var rawResults = await ExecuteFtsSearchAsync(conn, query, ct);
+            var terms = BuildFtsQuery(query);
+            var rawResults = terms.Length == 0
+                ? new List<RawSearchResult>()
+                : await ExecuteFtsSearchAsync(conn, terms, query, ct);
+
+            // If the feature-based query found nothing, retry with a broad query built straight from
+            // the raw OCR tokens — feature extraction can over-filter short/edge-case captures.
+            if (rawResults.Count == 0)
+            {
+                var fallback = BuildRawFallbackQuery(query.RawText);
+                if (fallback.Length > 0 && fallback != terms)
+                    rawResults = await ExecuteFtsSearchAsync(conn, fallback, query, ct);
+            }
+
             var scored = ScoreAndRank(rawResults, query);
             var top = scored.Take(query.MaxResults).ToList();
 
@@ -76,10 +90,8 @@ public sealed class LocalSearchIndex : ISearchIndex
     }
 
     private async Task<List<RawSearchResult>> ExecuteFtsSearchAsync(
-        SqliteConnection conn, SearchQuery query, CancellationToken ct)
+        SqliteConnection conn, string ftsTerms, SearchQuery query, CancellationToken ct)
     {
-        // Build FTS5 query from features
-        var ftsTerms = BuildFtsQuery(query);
         if (string.IsNullOrEmpty(ftsTerms)) return [];
 
         var sql = """
@@ -143,31 +155,45 @@ public sealed class LocalSearchIndex : ISearchIndex
         return results;
     }
 
+    private static readonly Regex TokenPattern = new(@"[\p{L}\p{Nd}]+", RegexOptions.Compiled);
+
     private static string BuildFtsQuery(SearchQuery query)
     {
-        // Combine all feature types into an FTS5 query
-        // Words get standard term search; variables/expressions get exact match
+        // Every term is wrapped as a quoted FTS5 phrase so that words which collide with FTS
+        // operators (AND, OR, NOT, NEAR) or contain punctuation can never corrupt the query.
         var terms = new List<string>();
 
-        foreach (var word in query.Features.Words.Take(10))
-        {
-            if (word.Length >= 3)
-                terms.Add(EscapeFtsTerm(word));
-        }
+        foreach (var word in query.Features.Words.Take(12))
+            if (word.Length >= 3) terms.Add(QuoteFts(word));
 
         foreach (var variable in query.Features.Variables)
-            terms.Add($"\"{EscapeFtsTerm(variable)}\""); // exact match
+            terms.Add(QuoteFts(variable));
 
         foreach (var unit in query.Features.Units)
-            terms.Add($"\"{EscapeFtsTerm(unit)}\"");
+            terms.Add(QuoteFts(unit));
 
-        if (!terms.Any()) return string.Empty;
-
-        return string.Join(" OR ", terms);
+        var distinct = terms.Where(t => t.Length > 2).Distinct().ToList();
+        return distinct.Count == 0 ? string.Empty : string.Join(" OR ", distinct);
     }
 
-    private static string EscapeFtsTerm(string term) =>
-        term.Replace("\"", "\"\"").Replace("*", "");
+    /// <summary>Broad fallback: quote the raw OCR tokens directly and OR them together.</summary>
+    private static string BuildRawFallbackQuery(string rawText)
+    {
+        if (string.IsNullOrWhiteSpace(rawText)) return string.Empty;
+
+        var tokens = TokenPattern.Matches(rawText)
+            .Select(m => m.Value.ToLowerInvariant())
+            .Where(t => t.Length >= 3)
+            .Distinct()
+            .Take(16)
+            .Select(QuoteFts)
+            .ToList();
+
+        return tokens.Count == 0 ? string.Empty : string.Join(" OR ", tokens);
+    }
+
+    private static string QuoteFts(string term) =>
+        "\"" + term.Replace("\"", "\"\"") + "\"";
 
     // ── Deterministic scoring (spec §55) ────────────────────────────────────
 

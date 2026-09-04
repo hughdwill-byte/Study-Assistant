@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -308,9 +309,22 @@ public sealed class NotionConnector : INoteSource
             ct.ThrowIfCancellationRequested();
             // Direct children of the course root are the "weeks"; deeper pages inherit that label.
             var childWeek = depth == 0 ? childTitle : weekLabel;
-            walked += await SyncPageRecursiveAsync(
-                courseId, courseName, childId, childTitle, childWeek, depth + 1, visited, progress, ct)
-                .ConfigureAwait(false);
+            try
+            {
+                walked += await SyncPageRecursiveAsync(
+                    courseId, courseName, childId, childTitle, childWeek, depth + 1, visited, progress, ct)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // One bad sub-page must not abort the rest of the course (spec §69).
+                _logger.LogWarning(ex, "Sub-page {Id} (“{Title}”) failed to sync; continuing.",
+                    childId, childTitle);
+            }
         }
 
         return walked;
@@ -406,21 +420,76 @@ public sealed class NotionConnector : INoteSource
             new AuthenticationHeaderValue("Bearer", token);
     }
 
-    private async Task<JsonElement?> GetAsync(string path, CancellationToken ct)
+    private Task<JsonElement?> GetAsync(string path, CancellationToken ct)
+        => SendAsync(() => new HttpRequestMessage(HttpMethod.Get, $"{NotionApiBase}/{path}"), ct);
+
+    private Task<JsonElement?> PostAsync(string path, object body, CancellationToken ct)
+        => SendAsync(() =>
+        {
+            var req = new HttpRequestMessage(HttpMethod.Post, $"{NotionApiBase}/{path}")
+            {
+                Content = new StringContent(
+                    JsonSerializer.Serialize(body), Encoding.UTF8, "application/json")
+            };
+            return req;
+        }, ct);
+
+    // ── Request throttling + 429 handling ─────────────────────────────────────
+    // Notion allows ~3 requests/second; exceeding it returns HTTP 429. Without pacing, a multi-page
+    // course sync bursts past the limit and the whole sync aborts partway — which is why some courses
+    // only pulled a few weeks. We space requests out and back off (honouring Retry-After) on 429.
+
+    private readonly SemaphoreSlim _throttle = new(1, 1);
+    private DateTimeOffset _nextAllowed = DateTimeOffset.MinValue;
+    private static readonly TimeSpan MinInterval = TimeSpan.FromMilliseconds(350); // ~3 req/s
+
+    private async Task<JsonElement?> SendAsync(Func<HttpRequestMessage> makeRequest, CancellationToken ct)
     {
-        var resp = await _http.GetAsync($"{NotionApiBase}/{path}", ct);
-        resp.EnsureSuccessStatusCode();
-        var json = await resp.Content.ReadAsStringAsync(ct);
-        return JsonSerializer.Deserialize<JsonElement>(json);
+        const int maxRetries = 6;
+        for (int attempt = 0; ; attempt++)
+        {
+            await PaceAsync(ct).ConfigureAwait(false);
+
+            using var req = makeRequest();
+            using var resp = await _http.SendAsync(req, ct).ConfigureAwait(false);
+
+            if (resp.StatusCode == HttpStatusCode.TooManyRequests && attempt < maxRetries)
+            {
+                var wait = RetryAfter(resp)
+                           ?? TimeSpan.FromSeconds(Math.Min(30, Math.Pow(2, attempt)));
+                _logger.LogWarning("Notion rate limit (429); waiting {Sec:0.#}s then retrying.",
+                    wait.TotalSeconds);
+                await Task.Delay(wait, ct).ConfigureAwait(false);
+                continue;
+            }
+
+            resp.EnsureSuccessStatusCode();
+            var json = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            return JsonSerializer.Deserialize<JsonElement>(json);
+        }
     }
 
-    private async Task<JsonElement?> PostAsync(string path, object body, CancellationToken ct)
+    private async Task PaceAsync(CancellationToken ct)
     {
-        using var content = new StringContent(
-            JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
-        var resp = await _http.PostAsync($"{NotionApiBase}/{path}", content, ct);
-        resp.EnsureSuccessStatusCode();
-        var json = await resp.Content.ReadAsStringAsync(ct);
-        return JsonSerializer.Deserialize<JsonElement>(json);
+        await _throttle.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            if (now < _nextAllowed)
+                await Task.Delay(_nextAllowed - now, ct).ConfigureAwait(false);
+            _nextAllowed = DateTimeOffset.UtcNow + MinInterval;
+        }
+        finally
+        {
+            _throttle.Release();
+        }
+    }
+
+    private static TimeSpan? RetryAfter(HttpResponseMessage resp)
+    {
+        if (resp.Headers.TryGetValues("Retry-After", out var values)
+            && double.TryParse(values.FirstOrDefault(), out var seconds))
+            return TimeSpan.FromSeconds(Math.Min(60, seconds) + 0.5);
+        return null;
     }
 }

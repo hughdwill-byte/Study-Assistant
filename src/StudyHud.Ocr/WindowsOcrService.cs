@@ -1,239 +1,171 @@
-using System.IO;
 using Microsoft.Extensions.Logging;
 using StudyHud.Core.Models;
 using StudyHud.Core.Services;
+using Windows.Globalization;
+using Windows.Graphics.Imaging;
+using Windows.Storage.Streams;
+using WinRtOcrEngine = Windows.Media.Ocr.OcrEngine;
+using WinRtOcrResult = Windows.Media.Ocr.OcrResult;
 
 namespace StudyHud.Ocr;
 
 /// <summary>
-/// OCR service using Windows.Media.Ocr (built-in Windows OCR engine).
-/// Local-only — no data sent to any cloud service (spec §40, §71).
-/// 
-/// NOTE: Windows.Media.Ocr requires the WinRT runtime and a language pack installed
-/// on the user's machine. Falls back gracefully when unavailable.
+/// OCR service using the built-in Windows OCR engine (Windows.Media.Ocr) — local only, no cloud
+/// (spec §40, §71). Targets the Windows 10 SDK so the WinRT APIs are called directly. Requires an
+/// OCR language pack; falls back gracefully (empty result) when the engine or a language is missing.
 /// </summary>
 public sealed class WindowsOcrService : IOcrService
 {
     private readonly ILogger<WindowsOcrService> _logger;
-    private bool? _available;
+    private readonly object _gate = new();
+    private WinRtOcrEngine? _engine;
+    private bool _initialised;
 
-    public WindowsOcrService(ILogger<WindowsOcrService> logger)
-    {
-        _logger = logger;
-    }
+    public WindowsOcrService(ILogger<WindowsOcrService> logger) => _logger = logger;
 
     public string EngineName => "Windows.Media.Ocr";
 
-    public bool IsAvailable
+    public bool IsAvailable => GetEngine() is not null;
+
+    private WinRtOcrEngine? GetEngine()
     {
-        get
+        lock (_gate)
         {
-            if (_available.HasValue) return _available.Value;
+            if (_initialised) return _engine;
+            _initialised = true;
             try
             {
-                // Check if the WinRT OCR engine is available
-                // Windows.Media.Ocr.OcrEngine.IsLanguageSupported requires at least one language pack
-                _available = CheckAvailability();
+                // Prefer the user's own languages; fall back to English variants.
+                _engine = WinRtOcrEngine.TryCreateFromUserProfileLanguages()
+                          ?? TryLanguage("en-US")
+                          ?? TryLanguage("en-GB")
+                          ?? TryLanguage("en");
+                if (_engine is null)
+                    _logger.LogWarning(
+                        "No Windows OCR language is installed. Install one via Settings → Time & language "
+                        + "→ Language & region → your language → Language options → Basic typing / OCR.");
             }
-            catch
+            catch (Exception ex)
             {
-                _available = false;
+                _logger.LogError(ex, "Failed to create the Windows OCR engine.");
+                _engine = null;
             }
-            return _available.Value;
+            return _engine;
         }
     }
 
-    private static bool CheckAvailability()
+    private static WinRtOcrEngine? TryLanguage(string tag)
     {
-        // WinRT availability check — requires net8.0-windows + UseWinRT
-        // Using reflection to avoid hard compile-time WinRT dependency
-        var engineType = Type.GetType(
-            "Windows.Media.Ocr.OcrEngine, Windows, ContentType=WindowsRuntime",
-            throwOnError: false);
-        return engineType != null;
+        try
+        {
+            var lang = new Language(tag);
+            return WinRtOcrEngine.IsLanguageSupported(lang)
+                ? WinRtOcrEngine.TryCreateFromLanguage(lang)
+                : null;
+        }
+        catch { return null; }
     }
 
     public async Task<OcrResult> RecogniseAsync(byte[] imageBytes, CancellationToken ct = default)
     {
-        if (!IsAvailable)
-        {
-            _logger.LogWarning("Windows OCR engine is unavailable — returning empty result.");
-            return new OcrResult
-            {
-                RawText = string.Empty,
-                NormalisedText = string.Empty,
-                Confidence = 0f,
-                Words = [],
-                EngineName = EngineName
-            };
-        }
+        var engine = GetEngine();
+        if (engine is null || imageBytes is not { Length: > 0 })
+            return Empty();
 
         try
         {
-            return await RunWindowsOcrAsync(imageBytes, ct);
+            using var stream = new InMemoryRandomAccessStream();
+            var writer = new DataWriter(stream);
+            writer.WriteBytes(imageBytes);
+            await writer.StoreAsync();
+            await writer.FlushAsync();
+            writer.DetachStream();
+            stream.Seek(0);
+
+            var decoder = await BitmapDecoder.CreateAsync(stream);
+            using var decoded = await decoder.GetSoftwareBitmapAsync();
+
+            // OCR wants a Bgra8 bitmap; convert regardless of the source format.
+            using var bitmap = SoftwareBitmap.Convert(
+                decoded, BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
+
+            ct.ThrowIfCancellationRequested();
+            var ocr = await engine.RecognizeAsync(bitmap);
+
+            var rawText = ocr.Text ?? string.Empty;
+            var words = ExtractWords(ocr);
+            var normalised = OcrNormaliser.Normalise(rawText);
+            // Windows OCR exposes no confidence score; treat any recognised words as usable text.
+            float confidence = words.Count > 0 ? 0.9f : 0f;
+
+            _logger.LogDebug("OCR read {Words} words / {Chars} chars.", words.Count, rawText.Length);
+
+            return new OcrResult
+            {
+                RawText = rawText,
+                NormalisedText = normalised,
+                Confidence = confidence,
+                Words = words,
+                EngineName = EngineName
+            };
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Windows OCR failed.");
-            return new OcrResult
-            {
-                RawText = string.Empty,
-                NormalisedText = string.Empty,
-                Confidence = 0f,
-                Words = [],
-                EngineName = EngineName
-            };
+            _logger.LogError(ex, "Windows OCR failed on an image.");
+            return Empty();
         }
     }
 
-    private async Task<OcrResult> RunWindowsOcrAsync(byte[] imageBytes, CancellationToken ct)
+    private OcrResult Empty() => new()
     {
-        // Load bitmap via WPF imaging pipeline
-        var bitmapSource = LoadBitmapSource(imageBytes);
+        RawText = string.Empty,
+        NormalisedText = string.Empty,
+        Confidence = 0f,
+        Words = [],
+        EngineName = EngineName
+    };
 
-        // Use dynamic invocation to call WinRT OCR without hard type reference
-        // In a full build, this would use the generated Windows SDK wrappers directly.
-        // Here we use reflection to remain buildable without the WinRT interop assembly
-        // being in every configuration.
-        dynamic? engine = CreateOcrEngine();
-        if (engine == null)
-        {
-            return new OcrResult
-            {
-                RawText = string.Empty,
-                NormalisedText = string.Empty,
-                Confidence = 0.5f,
-                Words = [],
-                EngineName = EngineName
-            };
-        }
-
-        // Convert WPF BitmapSource to SoftwareBitmap via Windows.Graphics.Imaging
-        // (requires WinRT interop — simplified here)
-        var softwareBitmap = await CreateSoftwareBitmapAsync(bitmapSource);
-        var ocrResult = await engine.RecognizeAsync(softwareBitmap);
-
-        var rawText = (string)ocrResult.Text;
-        var words = ExtractWords(ocrResult);
-        var normalisedText = OcrNormaliser.Normalise(rawText);
-        float confidence = EstimateConfidence(words);
-
-        _logger.LogDebug("OCR completed: {CharCount} chars, confidence {Conf:P0}.",
-            rawText.Length, confidence);
-
-        return new OcrResult
-        {
-            RawText = rawText,
-            NormalisedText = normalisedText,
-            Confidence = confidence,
-            Words = words,
-            EngineName = EngineName
-        };
-    }
-
-    private static System.Windows.Media.Imaging.BitmapSource LoadBitmapSource(byte[] bytes)
-    {
-        using var ms = new MemoryStream(bytes);
-        var decoder = System.Windows.Media.Imaging.BitmapDecoder.Create(
-            ms,
-            System.Windows.Media.Imaging.BitmapCreateOptions.PreservePixelFormat,
-            System.Windows.Media.Imaging.BitmapCacheOption.OnLoad);
-        return decoder.Frames[0];
-    }
-
-    private static dynamic? CreateOcrEngine()
-    {
-        try
-        {
-            var engineType = Type.GetType(
-                "Windows.Media.Ocr.OcrEngine, Windows, ContentType=WindowsRuntime");
-            if (engineType == null) return null;
-
-            // Get a language for OCR
-            var languageType = Type.GetType(
-                "Windows.Globalization.Language, Windows, ContentType=WindowsRuntime");
-            if (languageType == null) return null;
-
-            var lang = Activator.CreateInstance(languageType, "en");
-            return engineType.GetMethod("TryCreateFromLanguage")?.Invoke(null, [lang]);
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private static async Task<dynamic?> CreateSoftwareBitmapAsync(
-        System.Windows.Media.Imaging.BitmapSource source)
-    {
-        // Simplified: return null — proper implementation uses
-        // Windows.Graphics.Imaging.SoftwareBitmap via WinRT interop.
-        // The full implementation is wired up when the WinRT SDK is available.
-        await Task.CompletedTask;
-        return null;
-    }
-
-    private static IReadOnlyList<OcrWord> ExtractWords(dynamic ocrResult)
+    private static IReadOnlyList<OcrWord> ExtractWords(WinRtOcrResult ocr)
     {
         var words = new List<OcrWord>();
-        try
+        foreach (var line in ocr.Lines)
         {
-            foreach (var line in ocrResult.Lines)
             foreach (var word in line.Words)
             {
+                var r = word.BoundingRect;
                 words.Add(new OcrWord
                 {
-                    Text = (string)word.Text,
-                    Confidence = 0.8f, // Windows OCR doesn't expose per-word confidence
+                    Text = word.Text,
+                    Confidence = 0.9f, // Windows OCR does not expose per-word confidence
                     BoundingBox = new ScreenRect(
-                        (int)word.BoundingRect.X,
-                        (int)word.BoundingRect.Y,
-                        (int)(word.BoundingRect.X + word.BoundingRect.Width),
-                        (int)(word.BoundingRect.Y + word.BoundingRect.Height))
+                        (int)r.X, (int)r.Y, (int)(r.X + r.Width), (int)(r.Y + r.Height))
                 });
             }
         }
-        catch { /* Dynamic invocation may fail on schema changes */ }
         return words;
-    }
-
-    private static float EstimateConfidence(IReadOnlyList<OcrWord> words)
-    {
-        if (words.Count == 0) return 0f;
-        return words.Average(w => w.Confidence);
     }
 }
 
 /// <summary>
-/// Deterministic OCR normalisation rules for mathematical notation (spec §53).
-/// Preserves original text alongside normalised version.
-/// Does NOT use LLMs or generative AI.
+/// Deterministic OCR normalisation for engineering maths (spec §53): lowercases for
+/// case-insensitive matching while restoring canonical unit casing. No generative AI.
 /// </summary>
 public static class OcrNormaliser
 {
-    // Conservative symbol corrections for engineering mathematics
-    private static readonly (string From, string To)[] SymbolRules = [
-        ("o-", "σ-"),   // Common sigma misread
-        (" l ", " I "), // Capital I misread as lowercase l in context
-        ("kNm", "kNm"), // Preserve engineering units
-    ];
-
     public static string Normalise(string raw)
     {
         if (string.IsNullOrEmpty(raw)) return raw;
 
-        var text = raw.Normalize(System.Text.NormalizationForm.FormC);
-        text = text.ToLowerInvariant();
-
-        // Preserve engineering unit casing (kNm, MPa, GPa, etc.)
-        text = RestoreEngineeringUnits(text);
-
-        return text;
+        var text = raw.Normalize(System.Text.NormalizationForm.FormC).ToLowerInvariant();
+        return RestoreEngineeringUnits(text);
     }
 
     private static string RestoreEngineeringUnits(string text)
     {
-        // Restore common engineering units to their canonical form
         string[] units = ["kNm", "MPa", "GPa", "kPa", "kN", "kJ", "kg", "mm", "cm", "MN"];
         foreach (var unit in units)
             text = text.Replace(unit.ToLowerInvariant(), unit, StringComparison.OrdinalIgnoreCase);
