@@ -61,12 +61,46 @@ public partial class MainWindow : Window
             CourseLabel.Text = state.CurrentCourseId ?? "No course selected";
     }
 
-    // Closing the window hides it rather than exiting (spec §105)
+    private bool _isQuitting;
+
+    /// <summary>Fully exits Study HUD (settings window + HUD overlays). Triggers App.OnExit.</summary>
+    private void QuitApp()
+    {
+        if (_isQuitting) return;
+        _isQuitting = true;
+        _logger.LogInformation("Quitting Study HUD at user request.");
+        System.Windows.Application.Current.Shutdown();
+    }
+
+    private void OnQuit(object sender, RoutedEventArgs e) => QuitApp();
+
+    // Closing the settings window asks whether to quit or keep the HUD running (spec §105).
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
-        e.Cancel = true;
-        Hide();
-        _logger.LogDebug("Settings window hidden (HUD still running).");
+        if (_isQuitting) { base.OnClosing(e); return; } // already shutting down — let it close
+
+        var result = MessageBox.Show(
+            "Quit Study HUD?\n\n" +
+            "• Yes — quit completely (the HUD closes too).\n" +
+            "• No — keep the HUD running in the background.\n" +
+            "• Cancel — stay on this window.",
+            "Study HUD", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+
+        switch (result)
+        {
+            case MessageBoxResult.Yes:
+                e.Cancel = true;   // don't just close this window — shut the whole app down
+                QuitApp();
+                break;
+            case MessageBoxResult.No:
+                e.Cancel = true;
+                Hide();
+                _logger.LogDebug("Settings window hidden (HUD still running).");
+                break;
+            default: // Cancel
+                e.Cancel = true;
+                break;
+        }
     }
 
     // Navigation

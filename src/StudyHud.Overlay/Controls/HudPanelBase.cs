@@ -86,7 +86,29 @@ public abstract class HudPanelBase : UserControl
             Margin = new Thickness(6, 0, 0, 0),
             IsHitTestVisible = false
         };
-        EditHandleBar.Child = dragLabel;
+
+        // Close (✕) box — hides this panel. Reachable in Edit mode where the handle bar shows.
+        var closeButton = new Button
+        {
+            Content = "✕",
+            Width = 20,
+            Height = 20,
+            FontSize = 11,
+            Padding = new Thickness(0),
+            Foreground = Brushes.White,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Cursor = Cursors.Hand,
+            VerticalAlignment = VerticalAlignment.Center,
+            ToolTip = "Hide this panel"
+        };
+        closeButton.Click += OnClosePanel;
+
+        var barLayout = new DockPanel();
+        DockPanel.SetDock(closeButton, Dock.Right);
+        barLayout.Children.Add(closeButton);
+        barLayout.Children.Add(dragLabel);
+        EditHandleBar.Child = barLayout;
 
         EditHandleBar.MouseLeftButtonDown += OnDragStart;
         EditHandleBar.MouseMove += OnDragMove;
@@ -198,8 +220,16 @@ public abstract class HudPanelBase : UserControl
 
     // ── Drag (Edit Mode) ─────────────────────────────────────────────────────
 
+    /// <summary>Hides this panel. It reappears next launch (a hide, not a permanent removal).</summary>
+    private void OnClosePanel(object sender, RoutedEventArgs e)
+    {
+        Visibility = Visibility.Collapsed;
+        e.Handled = true;
+    }
+
     private void OnDragStart(object sender, MouseButtonEventArgs e)
     {
+        if (e.OriginalSource is Button) return; // clicking the ✕ close box must not begin a drag
         if (_appState.Current.HudInteractionState != HudInteractionState.Edit) return;
         _isDragging = true;
         _dragStart = e.GetPosition(null);
