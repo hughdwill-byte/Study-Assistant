@@ -100,6 +100,8 @@
                             Click="OnToggleAssessmentMode"/>
                     <Button Content="Themes" Margin="8,2" Click="OnShowSettings"/>
                     <Button Content="Settings" Margin="8,2" Click="OnShowSettings"/>
+                    <Button Content="Quit Study HUD" Margin="8,10,8,2"
+                            Background="#CC4422" Click="OnQuit"/>
                 </StackPanel>
             </Border>
 
