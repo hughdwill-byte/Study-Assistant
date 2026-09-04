@@ -154,6 +154,12 @@ public partial class MainWindow : Window
     private void OnToggleHudVisibility(object sender, RoutedEventArgs e)
         => _appState.SetHudVisible(!_appState.Current.HudVisible);
 
+    private async void OnCaptureNote(object sender, RoutedEventArgs e)
+    {
+        var engine = _services.GetRequiredService<StudyHud.Macros.Services.MacroEngine>();
+        await engine.CaptureNoteAsync();
+    }
+
     // XAML x:Name attributes generate the field declarations automatically.
     // No manual field declarations needed for AssessmentIndicator, WorkspaceLabel, CourseLabel.
 }

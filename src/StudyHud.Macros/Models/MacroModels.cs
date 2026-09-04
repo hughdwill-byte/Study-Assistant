@@ -110,6 +110,24 @@ public record TogglePanelCollapseAction : MacroAction
     public string? PanelId { get; init; } // null = all edge-attached panels
 }
 
+public record ToggleHudAction : MacroAction
+{
+    public ToggleHudAction() => ActionType = MacroActionType.ToggleHud;
+}
+
+public record OpenUrlAction : MacroAction
+{
+    public OpenUrlAction() => ActionType = MacroActionType.OpenUrl;
+    public required string Url { get; init; }
+}
+
+public record LaunchProgramAction : MacroAction
+{
+    public LaunchProgramAction() => ActionType = MacroActionType.LaunchProgram;
+    public required string Path { get; init; }
+    public string? Arguments { get; init; }
+}
+
 // ─── Macro Definition ─────────────────────────────────────────────────────────
 
 public record MacroDefinition

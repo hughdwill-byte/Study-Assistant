@@ -6,6 +6,8 @@ using Microsoft.Extensions.Logging;
 using Serilog;
 using StudyHud.Capture;
 using StudyHud.Core.Services;
+using StudyHud.Macros;
+using StudyHud.Macros.Models;
 using StudyHud.Macros.Services;
 using StudyHud.Notion;
 using StudyHud.Ocr;
@@ -24,6 +26,7 @@ namespace StudyHud.App;
 public partial class App : Application
 {
     private IHost? _host;
+    private readonly Dictionary<int, MacroDefinition> _macroHotkeys = new();
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -93,9 +96,41 @@ public partial class App : Application
             holdToInteract.ApplySettings(settings);
             holdToInteract.Start();
 
-            // Step 7: Start macro engine
+            // Step 7: Start macro engine, load the built-in macros, and route global input to it.
             var macroEngine = _host.Services.GetRequiredService<MacroEngine>();
             macroEngine.Start();
+
+            macroEngine.LoadMacros(DefaultMacros.All());
+            macroEngine.LoadProfiles(new[] { DefaultMacros.Profile() });
+            macroEngine.SetActiveProfile(DefaultMacros.ProfileId);
+
+            // Register global hotkeys for keyboard-triggered macros (ids well clear of other users).
+            int hotkeyId = 2000;
+            foreach (var macro in DefaultMacros.All())
+            {
+                if (macro.Trigger.Type is TriggerType.KeyboardShortcut or TriggerType.FunctionKey)
+                {
+                    _macroHotkeys[hotkeyId] = macro;
+                    globalInput.RegisterHotKey(
+                        hotkeyId, (ModifierKeys)macro.Trigger.Modifiers, macro.Trigger.VirtualKey);
+                    hotkeyId++;
+                }
+            }
+
+            // Hotkey events run the mapped macro directly; everything else (mouse side buttons, etc.)
+            // goes through the engine's trigger matching.
+            globalInput.InputReceived += (_, ev) =>
+            {
+                if (ev.EventType == GlobalInputEventType.HotKey)
+                {
+                    if (_macroHotkeys.TryGetValue(ev.HotKeyId, out var macro))
+                        macroEngine.Enqueue(macro);
+                }
+                else
+                {
+                    macroEngine.EvaluateTrigger(ev);
+                }
+            };
 
             // Step 7b: Start workspace coordination (restores saved layout + macro profile)
             var coordinator = _host.Services.GetRequiredService<WorkspaceCoordinator>();

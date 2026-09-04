@@ -1,3 +1,4 @@
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
@@ -19,6 +20,7 @@ public sealed class MacroEngine : IDisposable, IMacroProfileSwitcher
     private readonly IApplicationStateService _appState;
     private readonly IForegroundWindowService _foreground;
     private readonly IAssessmentPolicyService _policy;
+    private readonly ICaptureService _capture;
 
     private readonly Channel<(MacroDefinition Macro, bool IsDown)> _executionChannel =
         Channel.CreateBounded<(MacroDefinition, bool)>(new BoundedChannelOptions(32)
@@ -39,12 +41,42 @@ public sealed class MacroEngine : IDisposable, IMacroProfileSwitcher
         ILogger<MacroEngine> logger,
         IApplicationStateService appState,
         IForegroundWindowService foreground,
-        IAssessmentPolicyService policy)
+        IAssessmentPolicyService policy,
+        ICaptureService capture)
     {
         _logger = logger;
         _appState = appState;
         _foreground = foreground;
         _policy = policy;
+        _capture = capture;
+    }
+
+    /// <summary>Queues a macro to run now, bypassing trigger matching (used by the hotkey router).</summary>
+    public void Enqueue(MacroDefinition macro) => _executionChannel.Writer.TryWrite((macro, true));
+
+    /// <summary>
+    /// Captures a screen region and saves it as a note PNG under %LOCALAPPDATA%\StudyHud\Notes\
+    /// (the capture service also copies it to the clipboard). Public so the UI can trigger it too.
+    /// </summary>
+    public async Task CaptureNoteAsync(CancellationToken ct = default)
+    {
+        var result = await _capture.CaptureRegionAsync(ct).ConfigureAwait(false);
+        if (result?.ImageBytes is not { Length: > 0 } bytes) return;
+
+        try
+        {
+            var dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "StudyHud", "Notes");
+            Directory.CreateDirectory(dir);
+            var file = Path.Combine(dir, $"note-{DateTimeOffset.Now:yyyyMMdd-HHmmss-fff}.png");
+            await File.WriteAllBytesAsync(file, bytes, ct).ConfigureAwait(false);
+            _logger.LogInformation("Saved captured note to {File}.", file);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Captured note could not be saved to disk (clipboard copy still made).");
+        }
     }
 
     public void Start()
@@ -248,6 +280,10 @@ public sealed class MacroEngine : IDisposable, IMacroProfileSwitcher
                 case SwitchWorkspaceAction sw:
                     await _appState.SwitchWorkspaceAsync(sw.TargetWorkspace, ct); break;
                 case SwitchMacroProfileAction sm: SetActiveProfile(sm.ProfileId); break;
+                case CaptureRegionAction: await CaptureNoteAsync(ct); break;
+                case ToggleHudAction: _appState.SetHudVisible(!_appState.Current.HudVisible); break;
+                case OpenUrlAction ou: StartShell(ou.Url); break;
+                case LaunchProgramAction lp: StartShell(lp.Path, lp.Arguments); break;
                 case TogglePanelCollapseAction: /* handled by HUD layer */ break;
                 default:
                     _logger.LogDebug("Action {Type} not yet implemented.", action.ActionType);
@@ -259,6 +295,24 @@ public sealed class MacroEngine : IDisposable, IMacroProfileSwitcher
         {
             _logger.LogWarning(ex, "Action {Type} failed.", action.ActionType);
             return false;
+        }
+    }
+
+    private void StartShell(string target, string? args = null)
+    {
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = target,
+                Arguments = args ?? string.Empty,
+                UseShellExecute = true
+            };
+            System.Diagnostics.Process.Start(psi);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not launch '{Target}'.", target);
         }
     }
 
