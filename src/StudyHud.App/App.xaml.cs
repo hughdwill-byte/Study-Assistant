@@ -252,6 +252,7 @@ public partial class App : Application
                 services.AddTransient<LibraryView>();
                 services.AddTransient<MacrosView>();
                 services.AddTransient<LayoutsView>();
+                services.AddTransient<NotesView>();
             })
             .Build();
     }

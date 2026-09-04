@@ -83,6 +83,7 @@
                             Click="OnSwitchWorkspaceNoteTaking"/>
                     <Button Content="Courses" Margin="8,2" Click="OnShowLibrary"/>
                     <Button Content="Macros" Margin="8,2" Click="OnShowMacros"/>
+                    <Button Content="Notes" Margin="8,2" Click="OnShowNotes"/>
                     <Button Content="Layouts" Margin="8,2" Click="OnShowLayouts"/>
 
                     <TextBlock Text="STUDY LIBRARY" Margin="16,16,16,4"

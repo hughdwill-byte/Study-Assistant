@@ -136,6 +136,15 @@ public partial class MainWindow : Window
         PageHost.Content = _layoutsView;
     }
 
+    private NotesView? _notesView;
+
+    private void OnShowNotes(object sender, RoutedEventArgs e)
+    {
+        // Rebuilt each time so the list reflects notes captured since it was last opened.
+        _notesView = _services.GetRequiredService<NotesView>();
+        PageHost.Content = _notesView;
+    }
+
     private void OnShowHome(object sender, RoutedEventArgs e)
     {
         PageHost.Content = HomeView;
