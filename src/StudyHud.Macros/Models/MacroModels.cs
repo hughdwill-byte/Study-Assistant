@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using StudyHud.Core.Models;
 
 namespace StudyHud.Macros.Models;
@@ -89,6 +90,7 @@ public record DelayAction : MacroAction
 
 public record CaptureRegionAction : MacroAction
 {
+    [SetsRequiredMembers]
     public CaptureRegionAction() => ActionType = MacroActionType.CaptureRegion;
 }
 
@@ -112,6 +114,7 @@ public record TogglePanelCollapseAction : MacroAction
 
 public record ToggleHudAction : MacroAction
 {
+    [SetsRequiredMembers]
     public ToggleHudAction() => ActionType = MacroActionType.ToggleHud;
 }
 
