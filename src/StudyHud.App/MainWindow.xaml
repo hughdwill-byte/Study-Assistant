@@ -48,7 +48,7 @@
                 <Border DockPanel.Dock="Right"
                         x:Name="AssessmentBadge"
                         Visibility="Collapsed"
-                        Background="#CC4422"
+                        Background="{DynamicResource ErrorColour}"
                         CornerRadius="{DynamicResource CornerRadius}"
                         Padding="8,2"
                         Margin="8,0,0,0"
@@ -103,7 +103,7 @@
                     <Button Content="Themes" Margin="8,2" Click="OnShowThemes"/>
                     <Button Content="Settings" Margin="8,2" Click="OnShowSettings"/>
                     <Button Content="Quit Study HUD" Margin="8,10,8,2"
-                            Background="#CC4422" Click="OnQuit"/>
+                            Background="{DynamicResource ErrorColour}" Click="OnQuit"/>
                 </StackPanel>
             </Border>
 
@@ -152,7 +152,7 @@
                            Margin="16,0,0,0"/>
                 <TextBlock x:Name="AssessmentIndicator"
                            Text="● ASSESSMENT MODE"
-                           Foreground="#FF6644"
+                           Foreground="{DynamicResource ErrorColour}"
                            FontSize="{DynamicResource SmallFontSize}"
                            Margin="16,0,0,0"
                            Visibility="Collapsed"/>

@@ -27,7 +27,7 @@ public sealed class ThemeService : IThemeService
         ApplyTheme("Default");
     }
 
-    public IReadOnlyList<string> AvailableThemeIds => ["Default", "Dark", "Light"];
+    public IReadOnlyList<string> AvailableThemeIds => ["Default", "Dark", "Light", "Retro"];
     public string CurrentThemeId => _currentThemeId;
 
     public object? GetResource(string tokenKey) =>
@@ -44,6 +44,9 @@ public sealed class ThemeService : IThemeService
                 break;
             case "Light":
                 ApplyTokenSet(ThemeTokens.Light);
+                break;
+            case "Retro":
+                ApplyTokenSet(ThemeTokens.Retro);
                 break;
             default: // "Default" — neutral polished dark
                 ApplyTokenSet(ThemeTokens.Default);
@@ -97,6 +100,14 @@ public sealed class ThemeService : IThemeService
         Set("PanelPadding", new Thickness(tokens.PanelPadding));
         Set("BorderWidth", tokens.BorderWidth);
         Set("ButtonHeight", tokens.ButtonHeight);
+
+        // Presentation primitives (theme-agnostic feature flags; false in Default/Dark/Light).
+        // Panels read these to decide whether to draw corner brackets, scanlines, a segmented
+        // progress bar or a phosphor glow — never a theme-name comparison (spec §63).
+        Set("PanelCornerBrackets", tokens.CornerBrackets);
+        Set("PanelScanlines", tokens.Scanlines);
+        Set("SegmentedProgress", tokens.SegmentedProgress);
+        Set("PhosphorGlow", tokens.PhosphorGlow);
 
         // Typography
         Set("TitleFontFamily", new FontFamily(tokens.TitleFont));
@@ -180,6 +191,13 @@ internal record ThemeTokenSet
     public required double PanelPadding { get; init; }
     public required double BorderWidth { get; init; }
     public required double ButtonHeight { get; init; }
+
+    // Presentation primitives — additive, theme-agnostic. Default false so existing
+    // themes are unaffected; the Retro theme opts in to all four.
+    public bool CornerBrackets { get; init; }
+    public bool Scanlines { get; init; }
+    public bool SegmentedProgress { get; init; }
+    public bool PhosphorGlow { get; init; }
 }
 
 internal static class ThemeTokens
@@ -221,6 +239,39 @@ internal static class ThemeTokens
         PanelBackground = B(15, 15, 18, 235),
         SurfaceBackground = B(20, 20, 24, 245),
         Accent = B(99, 102, 241)
+    };
+
+    /// <summary>
+    /// "Retro" — 1980s CRT-terminal look: warm monochrome amber on near-black, 1px wireframe
+    /// strokes, square corners, corner brackets, scanlines and a phosphor glow. Presentation only.
+    /// </summary>
+    public static ThemeTokenSet Retro => new()
+    {
+        PanelBackground = B(14, 10, 8, 240),
+        PanelBorder = B(255, 122, 26, 97),
+        SurfaceBackground = B(9, 7, 6, 245),
+        SecondaryBackground = B(255, 122, 26, 20),
+        Accent = B(255, 122, 26),
+        PrimaryText = B(255, 210, 166),
+        SecondaryText = B(208, 149, 92),
+        Warning = B(255, 158, 27),
+        Error = B(255, 61, 32),
+        Success = B(255, 216, 107),
+        RevealTab = B(255, 122, 26, 140),
+        TitleFont = "Cascadia Mono SemiBold, Consolas",
+        BodyFont = "Cascadia Mono, Consolas",
+        MonoFont = "Cascadia Mono, Consolas",
+        BodyFontSize = 12,
+        SmallFontSize = 10,
+        TitleFontSize = 14,
+        CornerRadius = 0,
+        PanelPadding = 12,
+        BorderWidth = 1,
+        ButtonHeight = 26,
+        CornerBrackets = true,
+        Scanlines = true,
+        SegmentedProgress = true,
+        PhosphorGlow = true
     };
 
     public static ThemeTokenSet Light => new()
