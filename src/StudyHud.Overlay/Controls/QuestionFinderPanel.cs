@@ -242,7 +242,8 @@ public sealed class QuestionFinderPanel : HudPanelBase
         {
             Background = Application.Current.TryFindResource("SecondaryBackground") as Brush
                          ?? new SolidColorBrush(Color.FromArgb(180, 40, 40, 48)),
-            CornerRadius = new CornerRadius(4),
+            CornerRadius = Application.Current.TryFindResource("CornerRadius") is CornerRadius cr
+                ? cr : new CornerRadius(4),
             Margin = new Thickness(0, 0, 0, 8),
             Padding = new Thickness(10, 8, 10, 8)
         };

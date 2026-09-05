@@ -24,7 +24,8 @@ public sealed class ThemesView : UserControl
     private static readonly (string Name, string Hex)[] Swatches =
     [
         ("Sky", "#00B4FF"), ("Indigo", "#6366F1"), ("Violet", "#8B5CF6"), ("Teal", "#14B8A6"),
-        ("Green", "#22C55E"), ("Amber", "#F59E0B"), ("Orange", "#FB7185"), ("Red", "#EF4444")
+        ("Green", "#22C55E"), ("Amber", "#F59E0B"), ("Retro", "#FF7A1A"),
+        ("Orange", "#FB7185"), ("Red", "#EF4444")
     ];
 
     public ThemesView(IThemeService theme, ISettingsStore settings, ILogger<ThemesView> logger)

@@ -1,7 +1,9 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
+using System.Windows.Media.Effects;
 using StudyHud.Core.Services;
 
 namespace StudyHud.App;
@@ -19,21 +21,36 @@ public sealed class FocusView : UserControl
 
     private readonly TextBlock _time;
     private readonly TextBlock _phase;
-    private readonly ProgressBar _progress;
     private readonly Button _startPause;
     private readonly TextBlock _stats;
     private readonly StackPanel _dots;
+
+    // Progress is rendered either as a continuous bar (Default/Dark/Light) or as 16 discrete
+    // segments (Retro). Exactly one of these is built and added to the tree.
+    private readonly ProgressBar? _progress;
+    private readonly List<Border> _segments = new();
+    private readonly TextBlock _pct;
 
     private readonly TextBox _focusBox;
     private readonly TextBox _shortBox;
     private readonly TextBox _longBox;
     private readonly TextBox _afterBox;
 
+    // Presentation flags/geometry read once from the active theme's tokens.
+    private readonly bool _segmented;
+    private readonly bool _glow;
+    private readonly CornerRadius _radius;
+    private const int SegmentCount = 16;
+
     public FocusView(PomodoroService pomodoro, IApplicationStateService appState, ISettingsStore settings)
     {
         _pomodoro = pomodoro;
         _appState = appState;
         _settings = settings;
+
+        _segmented = TryFindResource("SegmentedProgress") is true;
+        _glow = TryFindResource("PhosphorGlow") is true;
+        _radius = TryFindResource("CornerRadius") is CornerRadius cr ? cr : new CornerRadius(6);
 
         var root = new StackPanel { Margin = new Thickness(4) };
 
@@ -56,7 +73,7 @@ public sealed class FocusView : UserControl
             Background = Brush("SecondaryBackground", Color.FromArgb(180, 40, 40, 48)),
             BorderBrush = Brush("PanelBorder", Color.FromRgb(60, 60, 70)),
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(6),
+            CornerRadius = _radius,
             Padding = new Thickness(20),
             HorizontalAlignment = HorizontalAlignment.Left
         };
@@ -67,7 +84,8 @@ public sealed class FocusView : UserControl
             Text = "READY", FontSize = 11, Opacity = 0.85,
             HorizontalAlignment = HorizontalAlignment.Center,
             Foreground = Brush("Accent", Color.FromRgb(0, 180, 255)),
-            FontFamily = new FontFamily("Cascadia Code, Consolas")
+            FontFamily = new FontFamily("Cascadia Code, Consolas"),
+            Effect = Glow(0.55, 14)
         };
         cardStack.Children.Add(_phase);
 
@@ -77,19 +95,51 @@ public sealed class FocusView : UserControl
             HorizontalAlignment = HorizontalAlignment.Center,
             Foreground = Brush("PrimaryText", Colors.White),
             FontFamily = new FontFamily("Cascadia Code, Consolas"),
-            Margin = new Thickness(0, 2, 0, 8)
+            Margin = new Thickness(0, 2, 0, 8),
+            Effect = Glow(0.55, 18)
         };
         cardStack.Children.Add(_time);
 
-        _progress = new ProgressBar
+        if (_segmented)
         {
-            Height = 6, Minimum = 0, Maximum = 100, Value = 0,
-            Foreground = Brush("Accent", Color.FromRgb(0, 180, 255)),
-            Background = Brush("PanelBorder", Color.FromRgb(60, 60, 70)),
-            BorderThickness = new Thickness(0),
-            Margin = new Thickness(0, 0, 0, 10)
+            // Retro: 16 discrete cells with a 3px gap, filled left-to-right.
+            var seg = new UniformGrid { Columns = SegmentCount, Height = 9, Margin = new Thickness(0, 0, 0, 4) };
+            for (int i = 0; i < SegmentCount; i++)
+            {
+                var cell = new Border
+                {
+                    Margin = new Thickness(0, 0, i == SegmentCount - 1 ? 0 : 3, 0),
+                    BorderBrush = Brush("PanelBorder", Color.FromArgb(77, 255, 122, 26)),
+                    BorderThickness = new Thickness(1),
+                    Background = Brushes.Transparent
+                };
+                _segments.Add(cell);
+                seg.Children.Add(cell);
+            }
+            cardStack.Children.Add(seg);
+        }
+        else
+        {
+            _progress = new ProgressBar
+            {
+                Height = 6, Minimum = 0, Maximum = 100, Value = 0,
+                Foreground = Brush("Accent", Color.FromRgb(0, 180, 255)),
+                Background = Brush("PanelBorder", Color.FromRgb(60, 60, 70)),
+                BorderThickness = new Thickness(0),
+                Margin = new Thickness(0, 0, 0, 10)
+            };
+            cardStack.Children.Add(_progress);
+        }
+
+        _pct = new TextBlock
+        {
+            FontSize = 10, Opacity = 0.85,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Foreground = Brush("SecondaryText", Colors.Gray),
+            Margin = new Thickness(0, 0, 0, 10),
+            FontFamily = new FontFamily("Cascadia Code, Consolas")
         };
-        cardStack.Children.Add(_progress);
+        if (_segmented) cardStack.Children.Add(_pct);
 
         _dots = new StackPanel
         {
@@ -202,9 +252,26 @@ public sealed class FocusView : UserControl
             _ => "READY"
         };
 
-        _progress.Value = _pomodoro.PhaseLength.TotalSeconds > 0
-            ? 100.0 * (1.0 - _pomodoro.Remaining.TotalSeconds / _pomodoro.PhaseLength.TotalSeconds)
+        double frac = _pomodoro.PhaseLength.TotalSeconds > 0
+            ? 1.0 - _pomodoro.Remaining.TotalSeconds / _pomodoro.PhaseLength.TotalSeconds
             : 0;
+        frac = Math.Clamp(frac, 0, 1);
+        if (_segmented)
+        {
+            int filled = (int)Math.Round(frac * SegmentCount);
+            for (int i = 0; i < _segments.Count; i++)
+            {
+                bool on = i < filled;
+                _segments[i].Background = on ? Brush("Accent", Color.FromRgb(0, 180, 255)) : Brushes.Transparent;
+                _segments[i].BorderThickness = new Thickness(on ? 0 : 1);
+                _segments[i].Effect = on ? Glow(0.4, 12) : null;
+            }
+            _pct.Text = $"LOADING…   {frac * 100:0}%";
+        }
+        else if (_progress != null)
+        {
+            _progress.Value = frac * 100;
+        }
 
         _startPause.Content = _pomodoro.IsRunning
             ? "Pause"
@@ -214,13 +281,31 @@ public sealed class FocusView : UserControl
         _dots.Children.Clear();
         int every = Math.Max(1, _pomodoro.LongBreakEvery);
         int inCycle = _pomodoro.CompletedToday % every;
-        for (int i = 0; i < every; i++)
-            _dots.Children.Add(new Border
-            {
-                Width = 7, Height = 7, CornerRadius = new CornerRadius(4), Margin = new Thickness(3, 0, 0, 0),
-                Background = i < inCycle ? Brush("Accent", Color.FromRgb(0, 180, 255))
-                                         : Brush("PanelBorder", Color.FromRgb(58, 58, 68))
-            });
+        if (_glow) // Retro: square dots with glow, framed by SESSION … n/N labels.
+        {
+            _dots.Children.Add(SessionLabel("SESSION", new Thickness(0, 0, 8, 0)));
+            for (int i = 0; i < every; i++)
+                _dots.Children.Add(new Border
+                {
+                    Width = 9, Height = 9, CornerRadius = _radius, Margin = new Thickness(3, 0, 0, 0),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    BorderBrush = Brush("PanelBorder", Color.FromArgb(115, 255, 122, 26)),
+                    BorderThickness = new Thickness(i < inCycle ? 0 : 1),
+                    Background = i < inCycle ? Brush("Accent", Color.FromRgb(0, 180, 255)) : Brushes.Transparent,
+                    Effect = i < inCycle ? Glow(0.5, 10) : null
+                });
+            _dots.Children.Add(SessionLabel($"  {inCycle}/{every}", new Thickness(6, 0, 0, 0)));
+        }
+        else // Default / Dark / Light: unchanged round dots.
+        {
+            for (int i = 0; i < every; i++)
+                _dots.Children.Add(new Border
+                {
+                    Width = 7, Height = 7, CornerRadius = new CornerRadius(4), Margin = new Thickness(3, 0, 0, 0),
+                    Background = i < inCycle ? Brush("Accent", Color.FromRgb(0, 180, 255))
+                                             : Brush("PanelBorder", Color.FromRgb(58, 58, 68))
+                });
+        }
 
         _stats.Text = $"Completed today: {_pomodoro.CompletedToday} pomodoro"
                     + (_pomodoro.CompletedToday == 1 ? "" : "s")
@@ -276,9 +361,28 @@ public sealed class FocusView : UserControl
         Content = content,
         Padding = new Thickness(16, 5, 16, 5),
         Cursor = System.Windows.Input.Cursors.Hand,
-        BorderThickness = new Thickness(0),
-        Foreground = accent ? Brushes.White : Brush("SecondaryText", Colors.Gray),
-        Background = accent ? Brush("Accent", Color.FromRgb(0, 180, 255)) : Brushes.Transparent
+        // Retro secondary buttons get a 1px amber outline; primary buttons keep the accent fill
+        // but switch to dark text + a glow.
+        BorderThickness = new Thickness(_glow && !accent ? 1 : 0),
+        BorderBrush = Brush("Accent", Color.FromRgb(255, 122, 26)),
+        Foreground = accent
+            ? (_glow ? new SolidColorBrush(Color.FromRgb(20, 10, 4)) : Brushes.White)
+            : (_glow ? Brush("PrimaryText", Colors.White) : Brush("SecondaryText", Colors.Gray)),
+        Background = accent ? Brush("Accent", Color.FromRgb(0, 180, 255)) : Brushes.Transparent,
+        Effect = accent ? Glow(0.4, 12) : null
+    };
+
+    /// <summary>A phosphor glow for Retro, or null under themes that don't set PhosphorGlow.</summary>
+    private DropShadowEffect? Glow(double opacity, double blur) => _glow
+        ? new DropShadowEffect { Color = Color.FromRgb(255, 122, 26), BlurRadius = blur, ShadowDepth = 0, Opacity = opacity }
+        : null;
+
+    private TextBlock SessionLabel(string text, Thickness margin) => new()
+    {
+        Text = text, FontSize = 10, Margin = margin,
+        VerticalAlignment = VerticalAlignment.Center,
+        Foreground = Brush("SecondaryText", Colors.Gray),
+        FontFamily = new FontFamily("Cascadia Code, Consolas")
     };
 
     private Brush Brush(string token, Color fallback)

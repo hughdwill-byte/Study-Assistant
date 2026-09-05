@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Shapes;
 using StudyHud.Core.Models;
 using StudyHud.Core.Services;
 
@@ -63,7 +64,7 @@ public abstract class HudPanelBase : UserControl
     {
         OuterBorder = new Border
         {
-            CornerRadius = new CornerRadius(6),
+            CornerRadius = Res("CornerRadius") is CornerRadius cr ? cr : new CornerRadius(6),
             BorderThickness = new Thickness(1),
             Padding = new Thickness(0),
             ClipToBounds = true
@@ -139,9 +140,13 @@ public abstract class HudPanelBase : UserControl
         seGrip.MouseLeftButtonUp += OnResizeEnd;
         ResizeGrips.Children.Add(seGrip);
 
-        // Overlay panel = content stack + resize grips
+        // Overlay panel = content stack + (optional) retro overlays + resize grips.
+        // The scanline sits above content but below the corner brackets; both are
+        // non-hit-testable and only appear when the active theme opts in.
         var overlay = new Grid();
         overlay.Children.Add(stack);
+        if (Res("PanelScanlines") is true) overlay.Children.Add(BuildScanline());
+        if (Res("PanelCornerBrackets") is true) overlay.Children.Add(BuildCornerBrackets(13));
         overlay.Children.Add(ResizeGrips);
 
         OuterBorder.Child = overlay;
@@ -149,6 +154,61 @@ public abstract class HudPanelBase : UserControl
 
         // Let subclass populate ContentGrid
         PopulateContent(ContentGrid);
+    }
+
+    private static object? Res(string key) => Application.Current?.TryFindResource(key);
+
+    /// <summary>Accent brush for the retro overlays, falling back to a hot amber.</summary>
+    private static Brush AccentBrush() =>
+        Res("Accent") as Brush ?? new SolidColorBrush(Color.FromRgb(255, 122, 26));
+
+    /// <summary>
+    /// A non-hit-testable scanline overlay: a 3×3 tile painting one 3×1 faint-amber line, giving
+    /// the CRT look. Only added when the theme sets <c>PanelScanlines</c>.
+    /// </summary>
+    private static Rectangle BuildScanline()
+    {
+        var line = new GeometryDrawing
+        {
+            Brush = new SolidColorBrush(Color.FromArgb(14, 255, 122, 26)), // ~5.5% alpha
+            Geometry = new RectangleGeometry(new Rect(0, 0, 3, 1))
+        };
+        var brush = new DrawingBrush(line)
+        {
+            TileMode = TileMode.Tile,
+            Viewport = new Rect(0, 0, 3, 3),
+            ViewportUnits = BrushMappingMode.Absolute,
+            Stretch = Stretch.None
+        };
+        return new Rectangle { Fill = brush, IsHitTestVisible = false };
+    }
+
+    /// <summary>
+    /// Four L-shaped 1px corner brackets drawn on top of the frame, inset by -1px so they overlap
+    /// the border. Only added when the theme sets <c>PanelCornerBrackets</c>.
+    /// </summary>
+    private static Grid BuildCornerBrackets(double size)
+    {
+        var accent = AccentBrush();
+        var grid = new Grid { IsHitTestVisible = false };
+
+        Border Corner(HorizontalAlignment h, VerticalAlignment v, Thickness edges) => new()
+        {
+            Width = size,
+            Height = size,
+            HorizontalAlignment = h,
+            VerticalAlignment = v,
+            Margin = new Thickness(-1),
+            BorderBrush = accent,
+            BorderThickness = edges,
+            IsHitTestVisible = false
+        };
+
+        grid.Children.Add(Corner(HorizontalAlignment.Left, VerticalAlignment.Top, new Thickness(1, 1, 0, 0)));
+        grid.Children.Add(Corner(HorizontalAlignment.Right, VerticalAlignment.Top, new Thickness(0, 1, 1, 0)));
+        grid.Children.Add(Corner(HorizontalAlignment.Left, VerticalAlignment.Bottom, new Thickness(1, 0, 0, 1)));
+        grid.Children.Add(Corner(HorizontalAlignment.Right, VerticalAlignment.Bottom, new Thickness(0, 0, 1, 1)));
+        return grid;
     }
 
     /// <summary>Subclasses implement this to fill the panel content area.</summary>

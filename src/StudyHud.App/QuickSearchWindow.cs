@@ -43,7 +43,7 @@ public sealed class QuickSearchWindow : Window
             Background = Brush("SurfaceBackground", Color.FromArgb(245, 32, 32, 38)),
             BorderBrush = Brush("PanelBorder", Color.FromRgb(60, 60, 70)),
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(10),
+            CornerRadius = TryFindResource("CornerRadius") is CornerRadius cr ? cr : new CornerRadius(10),
             Padding = new Thickness(14)
         };
         var stack = new StackPanel();
@@ -60,7 +60,21 @@ public sealed class QuickSearchWindow : Window
         _input.TextChanged += (_, _) => _debounce.Stop();
         _input.TextChanged += (_, _) => _debounce.Start();
         _input.PreviewKeyDown += OnKey;
-        stack.Children.Add(_input);
+
+        // Prompt glyph "❯" to the left of the input (additive; amber under Retro via the Accent token).
+        var inputRow = new DockPanel();
+        var prompt = new TextBlock
+        {
+            Text = "❯",
+            FontSize = 18,
+            Margin = new Thickness(2, 4, 10, 6),
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = Brush("Accent", Color.FromRgb(0, 180, 255))
+        };
+        DockPanel.SetDock(prompt, Dock.Left);
+        inputRow.Children.Add(prompt);
+        inputRow.Children.Add(_input);
+        stack.Children.Add(inputRow);
 
         stack.Children.Add(new Border
         {
