@@ -121,6 +121,10 @@ public sealed class ThemeService : IThemeService
         Set("LiquidGradient", tokens.LiquidGradient);
         Set("GlassSheen", tokens.GlassSheen);
         Set("FrostedGlass", tokens.FrostedGlass);
+        Set("CrtBezel", tokens.CrtBezel);
+        Set("PintSilhouette", tokens.PintSilhouette);
+        Set("MfdFrame", tokens.MfdFrame);
+        Set("GlassSlab", tokens.GlassSlab);
 
         // Typography
         Set("TitleFontFamily", new FontFamily(tokens.TitleFont));
@@ -215,6 +219,12 @@ internal record ThemeTokenSet
     public bool LiquidGradient { get; init; }
     public bool GlassSheen { get; init; }
     public bool FrostedGlass { get; init; }
+
+    // Depth-theme frame/material flags (spec: floating HUD panel depth themes).
+    public bool CrtBezel { get; init; }        // Retro: vignette + glass reflection + deep float
+    public bool PintSilhouette { get; init; }  // Beer: base shade + condensation + deep float
+    public bool MfdFrame { get; init; }        // Space: top-light edge + HUD ticks + plate float
+    public bool GlassSlab { get; init; }       // LiquidGlass: corner refraction + inner bloom + hairline
 }
 
 internal static class ThemeTokens
@@ -267,7 +277,7 @@ internal static class ThemeTokens
         PanelBackground = B(14, 10, 8, 240),
         PanelBorder = B(255, 122, 26, 97),
         SurfaceBackground = B(9, 7, 6, 245),
-        SecondaryBackground = B(255, 122, 26, 20),
+        SecondaryBackground = B(255, 122, 26, 33),
         Accent = B(255, 122, 26),
         PrimaryText = B(255, 210, 166),
         SecondaryText = B(208, 149, 92),
@@ -288,7 +298,8 @@ internal static class ThemeTokens
         CornerBrackets = true,
         Scanlines = true,
         SegmentedProgress = true,
-        PhosphorGlow = true
+        PhosphorGlow = true,
+        CrtBezel = true
     };
 
     /// <summary>
@@ -300,7 +311,7 @@ internal static class ThemeTokens
         PanelBackground = B(196, 124, 17, 240),
         PanelBorder = B(122, 74, 10, 217),
         SurfaceBackground = B(247, 239, 222, 245),
-        SecondaryBackground = B(255, 250, 238, 184),
+        SecondaryBackground = B(255, 250, 238, 219),
         Accent = B(232, 163, 23),
         PrimaryText = B(58, 42, 18),
         SecondaryText = B(107, 84, 48),
@@ -319,7 +330,8 @@ internal static class ThemeTokens
         BorderWidth = 1,
         ButtonHeight = 28,
         LiquidGradient = true,
-        GlassSheen = true
+        GlassSheen = true,
+        PintSilhouette = true
     };
 
     /// <summary>
@@ -328,10 +340,10 @@ internal static class ThemeTokens
     /// </summary>
     public static ThemeTokenSet Space => new()
     {
-        PanelBackground = B(6, 14, 26, 220),
+        PanelBackground = B(9, 28, 48, 240),
         PanelBorder = B(55, 224, 255, 115),
         SurfaceBackground = B(7, 17, 32, 240),
-        SecondaryBackground = B(14, 30, 50, 184),
+        SecondaryBackground = B(20, 44, 72, 217),
         Accent = B(55, 224, 255),
         PrimaryText = B(230, 246, 255),
         SecondaryText = B(127, 166, 191),
@@ -350,7 +362,8 @@ internal static class ThemeTokens
         BorderWidth = 1,
         ButtonHeight = 30,
         CornerBrackets = true,
-        PhosphorGlow = true
+        PhosphorGlow = true,
+        MfdFrame = true
     };
 
     /// <summary>
@@ -362,10 +375,10 @@ internal static class ThemeTokens
         PanelBackground = B(18, 38, 78, 148),
         PanelBorder = B(255, 255, 255, 71),
         SurfaceBackground = B(24, 48, 94, 179),
-        SecondaryBackground = B(255, 255, 255, 26),
+        SecondaryBackground = B(255, 255, 255, 51),
         Accent = B(59, 130, 246),
         PrimaryText = B(255, 255, 255),
-        SecondaryText = B(255, 255, 255, 184),
+        SecondaryText = B(255, 255, 255, 199),
         Warning = B(255, 194, 75),
         Error = B(255, 107, 94),
         Success = B(52, 211, 153),
@@ -376,11 +389,12 @@ internal static class ThemeTokens
         BodyFontSize = 13,
         SmallFontSize = 11,
         TitleFontSize = 17,
-        CornerRadius = 20,
+        CornerRadius = 26,
         PanelPadding = 18,
         BorderWidth = 1,
         ButtonHeight = 34,
-        FrostedGlass = true
+        FrostedGlass = true,
+        GlassSlab = true
     };
 
     public static ThemeTokenSet Light => new()

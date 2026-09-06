@@ -71,22 +71,22 @@ public abstract class HudPanelBase : UserControl
             Padding = new Thickness(0),
             ClipToBounds = true
         };
-        // LiquidGlass: a soft drop shadow gives the floating-glass depth (shadow only — never a blur
-        // on a Border with text children).
-        if (Res("FrostedGlass") is true)
-            OuterBorder.Effect = new DropShadowEffect
-            {
-                BlurRadius = 48, ShadowDepth = 20, Direction = 270,
-                Color = Color.FromRgb(4, 14, 42), Opacity = 0.5
-            };
+        // Every depth theme floats the panel with a drop shadow (shadow only — never a blur on a
+        // Border with text children). One Effect per element, so this is the panel's single Effect.
+        OuterBorder.Effect =
+            Res("FrostedGlass") is true ? Shadow(48, 20, Color.FromRgb(4, 14, 42), 0.5)
+            : Res("CrtBezel") is true ? Shadow(44, 12, Colors.Black, 0.55)
+            : Res("MfdFrame") is true ? Shadow(30, 18, Color.FromRgb(0, 8, 20), 0.6)
+            : Res("PintSilhouette") is true ? Shadow(26, 16, Color.FromRgb(60, 34, 4), 0.45)
+            : null;
 
-        // Edit mode drag handle at top
+        // Panel header / drag handle at top. Always shown (spec: the header bar is part of the design);
+        // dragging still only acts in Edit mode.
         EditHandleBar = new Border
         {
-            Height = 20,
+            Height = 22,
             Cursor = Cursors.SizeAll,
-            Background = (Brush)(Application.Current.TryFindResource("Accent") ?? Brushes.DodgerBlue),
-            Visibility = Visibility.Collapsed
+            Background = (Brush)(Application.Current.TryFindResource("Accent") ?? Brushes.DodgerBlue)
         };
         var dragLabel = new TextBlock
         {
@@ -157,8 +157,15 @@ public abstract class HudPanelBase : UserControl
         // The scanline sits above content but below the corner brackets; both are
         // non-hit-testable and only appear when the active theme opts in.
         var overlay = new Grid();
+        // Background depth layers sit UNDER the content.
+        if (Res("GlassSlab") is true) { overlay.Children.Add(BuildInnerBloom()); overlay.Children.Add(BuildCornerRefraction()); }
         overlay.Children.Add(stack);
+        // Foreground depth layers sit OVER the content (all non-hit-testable).
         if (Res("GlassSheen") is true) overlay.Children.Add(BuildGlassSheen());
+        if (Res("PintSilhouette") is true) overlay.Children.Add(BuildBaseShade());
+        if (Res("MfdFrame") is true) { overlay.Children.Add(BuildTopLight()); overlay.Children.Add(BuildHudTicks()); }
+        if (Res("CrtBezel") is true) { overlay.Children.Add(BuildVignette()); overlay.Children.Add(BuildGlassReflection()); }
+        if (Res("GlassSlab") is true) { overlay.Children.Add(BuildBottomHairline()); }
         if (Res("FrostedGlass") is true) overlay.Children.Add(BuildSpecularLine());
         if (Res("PanelScanlines") is true) overlay.Children.Add(BuildScanline());
         if (Res("PanelCornerBrackets") is true) overlay.Children.Add(BuildCornerBrackets(13));
@@ -240,6 +247,99 @@ public abstract class HudPanelBase : UserControl
         };
     }
 
+    // ── Depth-theme overlays (all non-hit-testable) ──────────────────────────
+
+    private static DropShadowEffect Shadow(double blur, double depth, Color color, double opacity) =>
+        new() { BlurRadius = blur, ShadowDepth = depth, Direction = 270, Color = color, Opacity = opacity };
+
+    /// <summary>Retro: a radial vignette that darkens the panel edges for the recessed-CRT read.</summary>
+    private static Rectangle BuildVignette()
+    {
+        var rg = new RadialGradientBrush { Center = new Point(0.5, 0.5), GradientOrigin = new Point(0.5, 0.5), RadiusX = 0.78, RadiusY = 0.78 };
+        rg.GradientStops.Add(new GradientStop(Color.FromArgb(0, 0, 0, 0), 0.52));
+        rg.GradientStops.Add(new GradientStop(Color.FromArgb(140, 0, 0, 0), 1.0));
+        return new Rectangle { Fill = rg, IsHitTestVisible = false };
+    }
+
+    /// <summary>Retro: a faint diagonal glass reflection across the top-left of the screen.</summary>
+    private static Rectangle BuildGlassReflection()
+    {
+        var lg = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 0.7) };
+        lg.GradientStops.Add(new GradientStop(Color.FromArgb(28, 255, 255, 255), 0.0));
+        lg.GradientStops.Add(new GradientStop(Color.FromArgb(8, 255, 255, 255), 0.25));
+        lg.GradientStops.Add(new GradientStop(Color.FromArgb(0, 255, 255, 255), 0.4));
+        return new Rectangle { Fill = lg, IsHitTestVisible = false };
+    }
+
+    /// <summary>Space: a 1px top-lit edge highlight along the frame's top.</summary>
+    private static Rectangle BuildTopLight()
+    {
+        var lg = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 0) };
+        lg.GradientStops.Add(new GradientStop(Color.FromArgb(0, 190, 225, 245), 0.0));
+        lg.GradientStops.Add(new GradientStop(Color.FromArgb(191, 190, 225, 245), 0.5));
+        lg.GradientStops.Add(new GradientStop(Color.FromArgb(0, 190, 225, 245), 1.0));
+        return new Rectangle { Height = 1, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(2, 1, 2, 0), Fill = lg, IsHitTestVisible = false };
+    }
+
+    /// <summary>Space: thin cyan HUD-tick strips at the top and bottom of the plate.</summary>
+    private static Grid BuildHudTicks()
+    {
+        DrawingBrush Ticks(byte a)
+        {
+            var line = new GeometryDrawing
+            {
+                Brush = new SolidColorBrush(Color.FromArgb(a, 55, 224, 255)),
+                Geometry = new RectangleGeometry(new Rect(0, 0, 1, 5))
+            };
+            return new DrawingBrush(line) { TileMode = TileMode.Tile, Viewport = new Rect(0, 0, 9, 5), ViewportUnits = BrushMappingMode.Absolute, Stretch = Stretch.None };
+        }
+        var grid = new Grid { IsHitTestVisible = false };
+        grid.Children.Add(new Rectangle { Height = 5, VerticalAlignment = VerticalAlignment.Top, Fill = Ticks(115), IsHitTestVisible = false });
+        grid.Children.Add(new Rectangle { Height = 5, VerticalAlignment = VerticalAlignment.Bottom, Fill = Ticks(77), IsHitTestVisible = false });
+        return grid;
+    }
+
+    /// <summary>Beer: darker sediment shading at the base of the glass.</summary>
+    private static Rectangle BuildBaseShade()
+    {
+        var lg = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1) };
+        lg.GradientStops.Add(new GradientStop(Color.FromArgb(0, 90, 54, 4), 0.0));
+        lg.GradientStops.Add(new GradientStop(Color.FromArgb(87, 90, 54, 4), 1.0));
+        return new Rectangle { Height = 46, VerticalAlignment = VerticalAlignment.Bottom, Fill = lg, IsHitTestVisible = false };
+    }
+
+    /// <summary>LiquidGlass: refraction highlights pinned to the top-left and bottom-right corners.</summary>
+    private static Grid BuildCornerRefraction()
+    {
+        Rectangle Corner(HorizontalAlignment h, VerticalAlignment v, byte a)
+        {
+            var rg = new RadialGradientBrush { Center = new Point(0.5, 0.5), GradientOrigin = new Point(0.5, 0.5), RadiusX = 0.5, RadiusY = 0.5 };
+            rg.GradientStops.Add(new GradientStop(Color.FromArgb(a, 255, 255, 255), 0.0));
+            rg.GradientStops.Add(new GradientStop(Color.FromArgb(0, 255, 255, 255), 1.0));
+            return new Rectangle { Width = 80, Height = 80, HorizontalAlignment = h, VerticalAlignment = v, Fill = rg, IsHitTestVisible = false };
+        }
+        var grid = new Grid { IsHitTestVisible = false };
+        grid.Children.Add(Corner(HorizontalAlignment.Left, VerticalAlignment.Top, 87));
+        grid.Children.Add(Corner(HorizontalAlignment.Right, VerticalAlignment.Bottom, 41));
+        return grid;
+    }
+
+    /// <summary>LiquidGlass: a soft inner light bloom behind the content.</summary>
+    private static Rectangle BuildInnerBloom()
+    {
+        var rg = new RadialGradientBrush { Center = new Point(0.5, 0.55), GradientOrigin = new Point(0.5, 0.55), RadiusX = 0.6, RadiusY = 0.6 };
+        rg.GradientStops.Add(new GradientStop(Color.FromArgb(46, 150, 190, 255), 0.0));
+        rg.GradientStops.Add(new GradientStop(Color.FromArgb(0, 150, 190, 255), 1.0));
+        return new Rectangle { Fill = rg, IsHitTestVisible = false };
+    }
+
+    /// <summary>LiquidGlass: a dark 1px hairline along the bottom edge that sells the glass thickness.</summary>
+    private static Rectangle BuildBottomHairline() => new()
+    {
+        Height = 1, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(2, 0, 2, 1),
+        Fill = new SolidColorBrush(Color.FromArgb(153, 4, 10, 26)), IsHitTestVisible = false
+    };
+
     /// <summary>
     /// A non-hit-testable scanline overlay: a 3×3 tile painting one 3×1 faint-amber line, giving
     /// the CRT look. Only added when the theme sets <c>PanelScanlines</c>.
@@ -319,7 +419,6 @@ public abstract class HudPanelBase : UserControl
                 IsHitTestVisible = false;
                 OuterBorder.Opacity = 0.85;
                 OuterBorder.Cursor = null;
-                EditHandleBar.Visibility = Visibility.Collapsed;
                 ResizeGrips.Visibility = Visibility.Collapsed;
                 break;
 
@@ -327,7 +426,6 @@ public abstract class HudPanelBase : UserControl
                 IsHitTestVisible = true;
                 OuterBorder.Opacity = 1.0;
                 OuterBorder.Cursor = null;
-                EditHandleBar.Visibility = Visibility.Collapsed;
                 ResizeGrips.Visibility = Visibility.Collapsed;
                 break;
 
@@ -335,7 +433,6 @@ public abstract class HudPanelBase : UserControl
                 IsHitTestVisible = true;
                 OuterBorder.Opacity = 1.0;
                 OuterBorder.Cursor = Cursors.SizeAll; // whole panel is draggable while calibrating
-                EditHandleBar.Visibility = Visibility.Visible;
                 ResizeGrips.Visibility = Visibility.Visible;
                 break;
         }

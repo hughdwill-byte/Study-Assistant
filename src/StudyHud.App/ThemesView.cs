@@ -16,6 +16,7 @@ public sealed class ThemesView : UserControl
     private readonly ISettingsStore _settings;
     private readonly ILogger<ThemesView> _logger;
 
+    private readonly WrapPanel _themeRow;
     private readonly Border _preview;
     private readonly TextBlock _hexLabel;
     private readonly TextBlock _status;
@@ -41,15 +42,9 @@ public sealed class ThemesView : UserControl
 
         // ── Base theme ───────────────────────────────────────────────────────
         root.Children.Add(Header("BASE THEME"));
-        var themeRow = new StackPanel { Orientation = Orientation.Horizontal };
-        foreach (var id in _theme.AvailableThemeIds)
-        {
-            var btn = MakeButton(id, accent: id == _theme.CurrentThemeId);
-            btn.Margin = new Thickness(0, 0, 8, 0);
-            btn.Click += (_, _) => ApplyThemeId(id);
-            themeRow.Children.Add(btn);
-        }
-        root.Children.Add(themeRow);
+        _themeRow = new WrapPanel();
+        BuildThemeButtons();
+        root.Children.Add(_themeRow);
 
         // ── Accent colour ────────────────────────────────────────────────────
         root.Children.Add(Header("ACCENT COLOUR"));
@@ -136,10 +131,24 @@ public sealed class ThemesView : UserControl
         }
     }
 
+    /// <summary>(Re)builds the base-theme buttons, highlighting whichever theme is now active.</summary>
+    private void BuildThemeButtons()
+    {
+        _themeRow.Children.Clear();
+        foreach (var id in _theme.AvailableThemeIds)
+        {
+            var btn = MakeButton(id, accent: id == _theme.CurrentThemeId);
+            btn.Margin = new Thickness(0, 0, 8, 8);
+            btn.Click += (_, _) => ApplyThemeId(id);
+            _themeRow.Children.Add(btn);
+        }
+    }
+
     private void ApplyThemeId(string id)
     {
         _theme.ApplyTheme(id);
         _ = _settings.UpdateAsync(s => s with { ThemeId = id });
+        BuildThemeButtons(); // move the highlight to the newly-selected theme
         SetStatus($"Theme set to {id}.");
     }
 
