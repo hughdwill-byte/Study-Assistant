@@ -200,8 +200,7 @@ public sealed class MacrosView : UserControl
         if (IsModifier(key)) return;
 
         _capturedVk = KeyInterop.VirtualKeyFromKey(key);
-        _capturedMods = (int)(Keyboard.Modifiers &
-            (ModifierKeys.Control | ModifierKeys.Alt | ModifierKeys.Shift | ModifierKeys.Windows));
+        _capturedMods = (int)(Keyboard.Modifiers & WpfMods);
         _shortcutBox.Text = MacroSpec.DescribeShortcut(_capturedMods, _capturedVk);
     }
 
@@ -228,8 +227,7 @@ public sealed class MacrosView : UserControl
         if (IsModifier(key)) return;
 
         int vk = KeyInterop.VirtualKeyFromKey(key);
-        int mods = (int)(Keyboard.Modifiers &
-            (ModifierKeys.Control | ModifierKeys.Alt | ModifierKeys.Shift | ModifierKeys.Windows));
+        int mods = (int)(Keyboard.Modifiers & WpfMods);
         AppendChord(MacroSpec.DescribeShortcut(mods, vk));
     }
 
@@ -240,6 +238,12 @@ public sealed class MacrosView : UserControl
         _seqBox.Text = text.Length > 0 ? $"{text} {chord}" : chord;
         _seqBox.CaretIndex = _seqBox.Text.Length;
     }
+
+    // The WPF modifier set we capture. Fully qualified because StudyHud.Core.Services also
+    // defines a ModifierKeys enum (used by the macro engine), which would make it ambiguous here.
+    private const System.Windows.Input.ModifierKeys WpfMods =
+        System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Alt
+        | System.Windows.Input.ModifierKeys.Shift | System.Windows.Input.ModifierKeys.Windows;
 
     private static bool IsModifier(Key key) =>
         key is Key.LeftCtrl or Key.RightCtrl or Key.LeftShift or Key.RightShift
