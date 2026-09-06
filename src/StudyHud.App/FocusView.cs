@@ -40,6 +40,7 @@ public sealed class FocusView : UserControl
     private readonly bool _segmented;
     private readonly bool _glow;
     private readonly bool _liquid;
+    private readonly bool _frosted;
     private readonly CornerRadius _radius;
     private const int SegmentCount = 16;
 
@@ -52,6 +53,7 @@ public sealed class FocusView : UserControl
         _segmented = TryFindResource("SegmentedProgress") is true;
         _glow = TryFindResource("PhosphorGlow") is true;
         _liquid = TryFindResource("LiquidGradient") is true;
+        _frosted = TryFindResource("FrostedGlass") is true;
         _radius = TryFindResource("CornerRadius") is CornerRadius cr ? cr : new CornerRadius(6);
 
         var root = new StackPanel { Margin = new Thickness(4) };
@@ -72,8 +74,11 @@ public sealed class FocusView : UserControl
         // ── Timer card (artboard 1b) ─────────────────────────────────────────
         var card = new Border
         {
-            // Beer paints the card as amber "liquid"; other themes use the flat surface token.
-            Background = _liquid ? LiquidBrush() : Brush("SecondaryBackground", Color.FromArgb(180, 40, 40, 48)),
+            // Beer paints the card as amber "liquid", LiquidGlass as frosted blue glass; other
+            // themes use the flat surface token.
+            Background = _liquid ? LiquidBrush()
+                : _frosted ? GlassFillBrush()
+                : Brush("SecondaryBackground", Color.FromArgb(180, 40, 40, 48)),
             BorderBrush = Brush("PanelBorder", Color.FromRgb(60, 60, 70)),
             BorderThickness = new Thickness(1),
             CornerRadius = _radius,
@@ -414,6 +419,16 @@ public sealed class FocusView : UserControl
         var g = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1) };
         g.GradientStops.Add(new GradientStop(Color.FromRgb(0xFF, 0xFF, 0xFF), 0.0));
         g.GradientStops.Add(new GradientStop(Color.FromRgb(0xF1, 0xE7, 0xCF), 1.0));
+        return g;
+    }
+
+    /// <summary>LiquidGlass: the frosted blue-glass gradient used as the card fill.</summary>
+    private static Brush GlassFillBrush()
+    {
+        var g = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0.26, 1) };
+        g.GradientStops.Add(new GradientStop(Color.FromArgb(56, 255, 255, 255), 0.0));
+        g.GradientStops.Add(new GradientStop(Color.FromArgb(33, 96, 140, 220), 0.45));
+        g.GradientStops.Add(new GradientStop(Color.FromArgb(140, 18, 38, 78), 1.0));
         return g;
     }
 

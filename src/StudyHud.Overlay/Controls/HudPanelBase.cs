@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
 using System.Windows.Shapes;
 using StudyHud.Core.Models;
 using StudyHud.Core.Services;
@@ -69,6 +70,14 @@ public abstract class HudPanelBase : UserControl
             Padding = new Thickness(0),
             ClipToBounds = true
         };
+        // LiquidGlass: a soft drop shadow gives the floating-glass depth (shadow only — never a blur
+        // on a Border with text children).
+        if (Res("FrostedGlass") is true)
+            OuterBorder.Effect = new DropShadowEffect
+            {
+                BlurRadius = 48, ShadowDepth = 20, Direction = 270,
+                Color = Color.FromRgb(4, 14, 42), Opacity = 0.5
+            };
 
         // Edit mode drag handle at top
         EditHandleBar = new Border
@@ -146,6 +155,7 @@ public abstract class HudPanelBase : UserControl
         var overlay = new Grid();
         overlay.Children.Add(stack);
         if (Res("GlassSheen") is true) overlay.Children.Add(BuildGlassSheen());
+        if (Res("FrostedGlass") is true) overlay.Children.Add(BuildSpecularLine());
         if (Res("PanelScanlines") is true) overlay.Children.Add(BuildScanline());
         if (Res("PanelCornerBrackets") is true) overlay.Children.Add(BuildCornerBrackets(13));
         overlay.Children.Add(ResizeGrips);
@@ -198,6 +208,32 @@ public abstract class HudPanelBase : UserControl
             Width = 12, HorizontalAlignment = HorizontalAlignment.Right, Fill = right, IsHitTestVisible = false
         });
         return grid;
+    }
+
+    /// <summary>LiquidGlass: the 165° frosted blue-glass fill layered over the flat panel tint.</summary>
+    private static Brush GlassFillBrush()
+    {
+        var g = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0.26, 1) };
+        g.GradientStops.Add(new GradientStop(Color.FromArgb(56, 255, 255, 255), 0.0));   // white 0.22
+        g.GradientStops.Add(new GradientStop(Color.FromArgb(33, 96, 140, 220), 0.45));   // blue 0.13
+        g.GradientStops.Add(new GradientStop(Color.FromArgb(140, 18, 38, 78), 1.0));     // navy 0.55
+        return g;
+    }
+
+    /// <summary>
+    /// LiquidGlass: a 1px specular highlight inset from each end of the panel's top edge. Non-hit-testable.
+    /// </summary>
+    private static Rectangle BuildSpecularLine()
+    {
+        var b = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 0) };
+        b.GradientStops.Add(new GradientStop(Color.FromArgb(0, 255, 255, 255), 0.1));
+        b.GradientStops.Add(new GradientStop(Color.FromArgb(242, 255, 255, 255), 0.5));
+        b.GradientStops.Add(new GradientStop(Color.FromArgb(0, 255, 255, 255), 0.9));
+        return new Rectangle
+        {
+            Height = 1, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(12, 2, 12, 0),
+            Fill = b, IsHitTestVisible = false
+        };
     }
 
     /// <summary>
@@ -312,8 +348,11 @@ public abstract class HudPanelBase : UserControl
         var border = Application.Current.TryFindResource("PanelBorder") as Brush
                      ?? new SolidColorBrush(Color.FromRgb(60, 60, 70));
 
-        // Beer paints panels as amber "liquid"; every other theme uses the flat panel token.
-        OuterBorder.Background = Res("LiquidGradient") is true ? LiquidBrush() : bg;
+        // Beer paints panels as amber "liquid"; LiquidGlass uses a frosted blue-glass gradient;
+        // every other theme uses the flat panel token.
+        OuterBorder.Background = Res("LiquidGradient") is true ? LiquidBrush()
+            : Res("FrostedGlass") is true ? GlassFillBrush()
+            : bg;
         OuterBorder.BorderBrush = border;
     }
 

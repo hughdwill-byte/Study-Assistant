@@ -27,7 +27,8 @@ public sealed class ThemeService : IThemeService
         ApplyTheme("Default");
     }
 
-    public IReadOnlyList<string> AvailableThemeIds => ["Default", "Dark", "Light", "Retro", "Beer", "Space"];
+    public IReadOnlyList<string> AvailableThemeIds =>
+        ["Default", "Dark", "Light", "Retro", "Beer", "Space", "LiquidGlass"];
     public string CurrentThemeId => _currentThemeId;
 
     public object? GetResource(string tokenKey) =>
@@ -53,6 +54,9 @@ public sealed class ThemeService : IThemeService
                 break;
             case "Space":
                 ApplyTokenSet(ThemeTokens.Space);
+                break;
+            case "LiquidGlass":
+                ApplyTokenSet(ThemeTokens.LiquidGlass);
                 break;
             default: // "Default" — neutral polished dark
                 ApplyTokenSet(ThemeTokens.Default);
@@ -116,6 +120,7 @@ public sealed class ThemeService : IThemeService
         Set("PhosphorGlow", tokens.PhosphorGlow);
         Set("LiquidGradient", tokens.LiquidGradient);
         Set("GlassSheen", tokens.GlassSheen);
+        Set("FrostedGlass", tokens.FrostedGlass);
 
         // Typography
         Set("TitleFontFamily", new FontFamily(tokens.TitleFont));
@@ -209,6 +214,7 @@ internal record ThemeTokenSet
     public bool PhosphorGlow { get; init; }
     public bool LiquidGradient { get; init; }
     public bool GlassSheen { get; init; }
+    public bool FrostedGlass { get; init; }
 }
 
 internal static class ThemeTokens
@@ -345,6 +351,36 @@ internal static class ThemeTokens
         ButtonHeight = 30,
         CornerBrackets = true,
         PhosphorGlow = true
+    };
+
+    /// <summary>
+    /// "LiquidGlass" — Apple-style frosted translucent glass: blue-tinted panels, big rounded corners,
+    /// white text, an electric-blue accent. The frosted fill + specular highlight are an overlay.
+    /// </summary>
+    public static ThemeTokenSet LiquidGlass => new()
+    {
+        PanelBackground = B(18, 38, 78, 148),
+        PanelBorder = B(255, 255, 255, 71),
+        SurfaceBackground = B(24, 48, 94, 179),
+        SecondaryBackground = B(255, 255, 255, 26),
+        Accent = B(59, 130, 246),
+        PrimaryText = B(255, 255, 255),
+        SecondaryText = B(255, 255, 255, 184),
+        Warning = B(255, 194, 75),
+        Error = B(255, 107, 94),
+        Success = B(52, 211, 153),
+        RevealTab = B(59, 130, 246, 204),
+        TitleFont = "Segoe UI Variable Display Semibold, Segoe UI Semibold",
+        BodyFont = "Segoe UI Variable Text, Segoe UI",
+        MonoFont = "Cascadia Code, Consolas",
+        BodyFontSize = 13,
+        SmallFontSize = 11,
+        TitleFontSize = 17,
+        CornerRadius = 20,
+        PanelPadding = 18,
+        BorderWidth = 1,
+        ButtonHeight = 34,
+        FrostedGlass = true
     };
 
     public static ThemeTokenSet Light => new()
