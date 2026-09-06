@@ -18,8 +18,10 @@ public sealed class OverlayManager : IDisposable
     private readonly ICaptureService _capture;
     private readonly IQuestionFinder _finder;
     private readonly IAssessmentPolicyService _policy;
+    private readonly ISettingsStore _settings;
     private readonly ILogger<OverlayManager> _logger;
     private readonly Dictionary<string, MonitorOverlayWindow> _overlays = new();
+    private string? _activeMonitorId;
     private bool _disposed;
 
     public OverlayManager(
@@ -29,6 +31,7 @@ public sealed class OverlayManager : IDisposable
         ICaptureService capture,
         IQuestionFinder finder,
         IAssessmentPolicyService policy,
+        ISettingsStore settings,
         ILogger<OverlayManager> logger)
     {
         _monitors = monitors;
@@ -37,17 +40,69 @@ public sealed class OverlayManager : IDisposable
         _capture = capture;
         _finder = finder;
         _policy = policy;
+        _settings = settings;
         _logger = logger;
 
         _monitors.TopologyChanged += OnTopologyChanged;
     }
 
-    public void Initialise()
-    {
-        foreach (var monitor in _monitors.Monitors)
-            CreateOverlayForMonitor(monitor);
+    /// <summary>The monitor the HUD is currently shown on, or null before initialisation.</summary>
+    public string? ActiveMonitorId => _activeMonitorId;
 
-        _logger.LogInformation("OverlayManager initialised with {Count} monitor overlays.", _overlays.Count);
+    /// <summary>
+    /// Shows the HUD on a single monitor (spec §4, §171): the saved one if it is still present,
+    /// otherwise the primary, otherwise the first. The HUD never appears on more than one monitor.
+    /// </summary>
+    public void Initialise(string? preferredMonitorId)
+    {
+        var target = ResolveMonitor(preferredMonitorId);
+        if (target == null)
+        {
+            _logger.LogWarning("OverlayManager: no monitors available to host the HUD.");
+            return;
+        }
+        _activeMonitorId = target.MonitorId;
+        CreateOverlayForMonitor(target);
+        _logger.LogInformation("OverlayManager initialised on monitor {Id} ({Device}).",
+            target.MonitorId, target.DeviceName);
+    }
+
+    private MonitorInfo? ResolveMonitor(string? preferredMonitorId) =>
+        _monitors.Monitors.FirstOrDefault(m => m.MonitorId == preferredMonitorId)
+        ?? _monitors.Monitors.FirstOrDefault(m => m.IsPrimary)
+        ?? _monitors.Monitors.FirstOrDefault();
+
+    /// <summary>
+    /// Moves the HUD to the next monitor in the topology (wrapping around) and persists the choice.
+    /// Returns the monitor now hosting the HUD, or null if there is only one monitor.
+    /// </summary>
+    public MonitorInfo? MoveToNextMonitor()
+    {
+        var list = _monitors.Monitors;
+        if (list.Count < 2) return null;
+
+        int index = -1;
+        for (int i = 0; i < list.Count; i++)
+            if (list[i].MonitorId == _activeMonitorId) { index = i; break; }
+
+        var next = list[(index + 1) % list.Count];
+        SetActiveMonitor(next.MonitorId);
+        return next;
+    }
+
+    /// <summary>Rehosts the HUD on the given monitor and saves it as the active monitor.</summary>
+    public void SetActiveMonitor(string monitorId)
+    {
+        var target = _monitors.Monitors.FirstOrDefault(m => m.MonitorId == monitorId);
+        if (target == null) return;
+
+        foreach (var id in _overlays.Keys.ToList())
+            DestroyOverlayForMonitor(id);
+
+        _activeMonitorId = target.MonitorId;
+        CreateOverlayForMonitor(target);
+        _ = _settings.UpdateAsync(s => s with { ActiveMonitorId = target.MonitorId });
+        _logger.LogInformation("HUD moved to monitor {Id} ({Device}).", target.MonitorId, target.DeviceName);
     }
 
     private void CreateOverlayForMonitor(MonitorInfo monitor)
@@ -83,16 +138,28 @@ public sealed class OverlayManager : IDisposable
     {
         System.Windows.Application.Current.Dispatcher.BeginInvoke(() =>
         {
-            foreach (var id in e.RemovedMonitorIds)
-                DestroyOverlayForMonitor(id);
+            // The HUD lives on exactly one monitor. If that monitor is gone, fall back to another;
+            // if it just moved/resized, re-apply its bounds. Never spawn overlays on other monitors.
+            bool activePresent = e.CurrentMonitors.Any(m => m.MonitorId == _activeMonitorId);
 
-            foreach (var monitor in e.CurrentMonitors.Where(m => e.AddedMonitorIds.Contains(m.MonitorId)))
-                CreateOverlayForMonitor(monitor);
-
-            foreach (var monitor in e.CurrentMonitors.Where(m => e.ChangedMonitorIds.Contains(m.MonitorId)))
+            if (!activePresent)
             {
-                if (_overlays.TryGetValue(monitor.MonitorId, out var overlay))
-                    overlay.ApplyMonitorBounds();
+                foreach (var id in _overlays.Keys.ToList())
+                    DestroyOverlayForMonitor(id);
+
+                var fallback = ResolveMonitor(null);
+                if (fallback != null)
+                {
+                    _activeMonitorId = fallback.MonitorId;
+                    CreateOverlayForMonitor(fallback);
+                    _ = _settings.UpdateAsync(s => s with { ActiveMonitorId = fallback.MonitorId });
+                }
+            }
+            else if (_activeMonitorId != null &&
+                     e.ChangedMonitorIds.Contains(_activeMonitorId) &&
+                     _overlays.TryGetValue(_activeMonitorId, out var overlay))
+            {
+                overlay.ApplyMonitorBounds();
             }
 
             _logger.LogInformation("Overlay topology update complete. Active overlays: {Count}.", _overlays.Count);

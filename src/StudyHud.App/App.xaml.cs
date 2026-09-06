@@ -87,7 +87,7 @@ public partial class App : Application
 
             // Step 6: Create overlay windows (must be on WPF UI thread)
             var overlayManager = _host.Services.GetRequiredService<OverlayManager>();
-            overlayManager.Initialise();
+            overlayManager.Initialise(settings.ActiveMonitorId);
 
             // Step 6b: Start global input + Hold-to-Interact (with the user's configured trigger)
             var globalInput = _host.Services.GetRequiredService<GlobalInputService>();
@@ -174,6 +174,7 @@ public partial class App : Application
                     sp.GetRequiredService<ICaptureService>(),
                     sp.GetRequiredService<IQuestionFinder>(),
                     sp.GetRequiredService<IAssessmentPolicyService>(),
+                    sp.GetRequiredService<ISettingsStore>(),
                     sp.GetRequiredService<ILogger<OverlayManager>>()));
 
                 // ── Capture ──────────────────────────────────────────────────
