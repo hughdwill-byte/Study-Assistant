@@ -1,5 +1,6 @@
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using StudyHud.Core.Models;
@@ -34,6 +35,9 @@ public sealed class MacroEngine : IDisposable, IMacroProfileSwitcher
     private string _activeProfileId = string.Empty;
     private readonly Dictionary<string, DateTimeOffset> _cooldowns = new();
 
+    // Auto-repeat timers, keyed by macro id (spec §30). Each ticks the macro onto the execution channel.
+    private readonly Dictionary<string, Timer> _repeats = new();
+
     private Task? _workerTask;
     private CancellationTokenSource? _cts;
 
@@ -53,6 +57,44 @@ public sealed class MacroEngine : IDisposable, IMacroProfileSwitcher
 
     /// <summary>Queues a macro to run now, bypassing trigger matching (used by the hotkey router).</summary>
     public void Enqueue(MacroDefinition macro) => _executionChannel.Writer.TryWrite((macro, true));
+
+    // ── Auto-repeat (spec §30) ──────────────────────────────────────────────
+    // A macro can be replayed on a fixed interval (down to 1 ms). The user starts and stops it from
+    // the editor; nothing repeats on its own.
+
+    /// <summary>Starts replaying <paramref name="macro"/> every <paramref name="intervalMs"/> ms (min 1).</summary>
+    public void StartRepeat(MacroDefinition macro, int intervalMs)
+    {
+        StopRepeat(macro.Id);
+        int period = Math.Max(1, intervalMs);
+        var timer = new Timer(_ => Enqueue(macro), null, 0, period);
+        lock (_repeats) _repeats[macro.Id] = timer;
+        _logger.LogInformation("Auto-repeat started for '{Name}' every {Ms} ms.", macro.Name, period);
+    }
+
+    /// <summary>Stops auto-repeating the macro with this id, if it is running.</summary>
+    public void StopRepeat(string macroId)
+    {
+        lock (_repeats)
+            if (_repeats.Remove(macroId, out var timer))
+                timer.Dispose();
+    }
+
+    /// <summary>Stops every running auto-repeat (called on shutdown and when macros are reloaded).</summary>
+    public void StopAllRepeats()
+    {
+        lock (_repeats)
+        {
+            foreach (var timer in _repeats.Values) timer.Dispose();
+            _repeats.Clear();
+        }
+    }
+
+    /// <summary>Whether the macro with this id is currently auto-repeating.</summary>
+    public bool IsRepeating(string macroId)
+    {
+        lock (_repeats) return _repeats.ContainsKey(macroId);
+    }
 
     /// <summary>
     /// Captures a screen region and saves it as a note PNG under %LOCALAPPDATA%\StudyHud\Notes\
@@ -87,6 +129,7 @@ public sealed class MacroEngine : IDisposable, IMacroProfileSwitcher
 
     public void Stop()
     {
+        StopAllRepeats();
         _cts?.Cancel();
         _executionChannel.Writer.TryComplete();
     }
@@ -284,6 +327,7 @@ public sealed class MacroEngine : IDisposable, IMacroProfileSwitcher
                 case ToggleHudAction: _appState.SetHudVisible(!_appState.Current.HudVisible); break;
                 case OpenUrlAction ou: StartShell(ou.Url); break;
                 case LaunchProgramAction lp: StartShell(lp.Path, lp.Arguments); break;
+                case MouseClickAction mc: SendMouseClick(mc.X, mc.Y, mc.Button); break;
                 case TogglePanelCollapseAction: /* handled by HUD layer */ break;
                 default:
                     _logger.LogDebug("Action {Type} not yet implemented.", action.ActionType);
@@ -343,6 +387,39 @@ public sealed class MacroEngine : IDisposable, IMacroProfileSwitcher
         if ((modifiers & 2) != 0) SendKey(0x11, true);
     }
 
+    // ── Mouse injection (recorded-click playback, spec §36) ─────────────────
+
+    [DllImport("user32.dll")]
+    private static extern int GetSystemMetrics(int nIndex);
+
+    private static void SendMouseClick(int x, int y, int button)
+    {
+        // Normalise the absolute pixel to the 0..65535 virtual-desktop space SendInput expects.
+        int vx = GetSystemMetrics(76), vy = GetSystemMetrics(77);          // SM_X/YVIRTUALSCREEN
+        int vw = Math.Max(1, GetSystemMetrics(78) - 1);                     // SM_CXVIRTUALSCREEN
+        int vh = Math.Max(1, GetSystemMetrics(79) - 1);                     // SM_CYVIRTUALSCREEN
+        int nx = (int)Math.Round((x - vx) * 65535.0 / vw);
+        int ny = (int)Math.Round((y - vy) * 65535.0 / vh);
+
+        const uint MOVE = 0x0001, ABSOLUTE = 0x8000, VIRTUALDESK = 0x4000;
+        uint down = button == 2 ? 0x0008u : 0x0002u;  // R/L BUTTONDOWN
+        uint up = button == 2 ? 0x0010u : 0x0004u;    // R/L BUTTONUP
+
+        SendMouseInput(nx, ny, MOVE | ABSOLUTE | VIRTUALDESK);
+        SendMouseInput(nx, ny, down | ABSOLUTE | VIRTUALDESK);
+        SendMouseInput(nx, ny, up | ABSOLUTE | VIRTUALDESK);
+    }
+
+    private static void SendMouseInput(int nx, int ny, uint flags)
+    {
+        var inputs = new NativeMethods.INPUT[1];
+        inputs[0].type = NativeMethods.INPUT.INPUT_MOUSE;
+        inputs[0].U.mi.dx = nx;
+        inputs[0].U.mi.dy = ny;
+        inputs[0].U.mi.dwFlags = flags;
+        NativeMethods.SendInput(1, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
+    }
+
     private async Task SendTextAsync(string text, bool useClipboard, CancellationToken ct)
     {
         if (useClipboard)
@@ -384,6 +461,7 @@ public sealed class MacroEngine : IDisposable, IMacroProfileSwitcher
 
     public void Dispose()
     {
+        StopAllRepeats();
         _cts?.Cancel();
         _cts?.Dispose();
     }

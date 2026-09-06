@@ -27,7 +27,8 @@ public sealed class ThemeService : IThemeService
         ApplyTheme("Default");
     }
 
-    public IReadOnlyList<string> AvailableThemeIds => ["Default", "Dark", "Light"];
+    public IReadOnlyList<string> AvailableThemeIds =>
+        ["Default", "Dark", "Light", "Retro", "Beer", "Space", "LiquidGlass"];
     public string CurrentThemeId => _currentThemeId;
 
     public object? GetResource(string tokenKey) =>
@@ -44,6 +45,18 @@ public sealed class ThemeService : IThemeService
                 break;
             case "Light":
                 ApplyTokenSet(ThemeTokens.Light);
+                break;
+            case "Retro":
+                ApplyTokenSet(ThemeTokens.Retro);
+                break;
+            case "Beer":
+                ApplyTokenSet(ThemeTokens.Beer);
+                break;
+            case "Space":
+                ApplyTokenSet(ThemeTokens.Space);
+                break;
+            case "LiquidGlass":
+                ApplyTokenSet(ThemeTokens.LiquidGlass);
                 break;
             default: // "Default" — neutral polished dark
                 ApplyTokenSet(ThemeTokens.Default);
@@ -97,6 +110,17 @@ public sealed class ThemeService : IThemeService
         Set("PanelPadding", new Thickness(tokens.PanelPadding));
         Set("BorderWidth", tokens.BorderWidth);
         Set("ButtonHeight", tokens.ButtonHeight);
+
+        // Presentation primitives (theme-agnostic feature flags; false in Default/Dark/Light).
+        // Panels read these to decide whether to draw corner brackets, scanlines, a segmented
+        // progress bar or a phosphor glow — never a theme-name comparison (spec §63).
+        Set("PanelCornerBrackets", tokens.CornerBrackets);
+        Set("PanelScanlines", tokens.Scanlines);
+        Set("SegmentedProgress", tokens.SegmentedProgress);
+        Set("PhosphorGlow", tokens.PhosphorGlow);
+        Set("LiquidGradient", tokens.LiquidGradient);
+        Set("GlassSheen", tokens.GlassSheen);
+        Set("FrostedGlass", tokens.FrostedGlass);
 
         // Typography
         Set("TitleFontFamily", new FontFamily(tokens.TitleFont));
@@ -180,6 +204,17 @@ internal record ThemeTokenSet
     public required double PanelPadding { get; init; }
     public required double BorderWidth { get; init; }
     public required double ButtonHeight { get; init; }
+
+    // Presentation primitives — additive, theme-agnostic. Default false so existing
+    // themes are unaffected. Retro uses brackets/scanlines/segments/glow; Space uses
+    // brackets + glow (cyan, from Accent); Beer uses the liquid gradient + glass sheen.
+    public bool CornerBrackets { get; init; }
+    public bool Scanlines { get; init; }
+    public bool SegmentedProgress { get; init; }
+    public bool PhosphorGlow { get; init; }
+    public bool LiquidGradient { get; init; }
+    public bool GlassSheen { get; init; }
+    public bool FrostedGlass { get; init; }
 }
 
 internal static class ThemeTokens
@@ -221,6 +256,131 @@ internal static class ThemeTokens
         PanelBackground = B(15, 15, 18, 235),
         SurfaceBackground = B(20, 20, 24, 245),
         Accent = B(99, 102, 241)
+    };
+
+    /// <summary>
+    /// "Retro" — 1980s CRT-terminal look: warm monochrome amber on near-black, 1px wireframe
+    /// strokes, square corners, corner brackets, scanlines and a phosphor glow. Presentation only.
+    /// </summary>
+    public static ThemeTokenSet Retro => new()
+    {
+        PanelBackground = B(14, 10, 8, 240),
+        PanelBorder = B(255, 122, 26, 97),
+        SurfaceBackground = B(9, 7, 6, 245),
+        SecondaryBackground = B(255, 122, 26, 20),
+        Accent = B(255, 122, 26),
+        PrimaryText = B(255, 210, 166),
+        SecondaryText = B(208, 149, 92),
+        Warning = B(255, 158, 27),
+        Error = B(255, 61, 32),
+        Success = B(255, 216, 107),
+        RevealTab = B(255, 122, 26, 140),
+        TitleFont = "Cascadia Mono SemiBold, Consolas",
+        BodyFont = "Cascadia Mono, Consolas",
+        MonoFont = "Cascadia Mono, Consolas",
+        BodyFontSize = 12,
+        SmallFontSize = 10,
+        TitleFontSize = 14,
+        CornerRadius = 0,
+        PanelPadding = 12,
+        BorderWidth = 1,
+        ButtonHeight = 26,
+        CornerBrackets = true,
+        Scanlines = true,
+        SegmentedProgress = true,
+        PhosphorGlow = true
+    };
+
+    /// <summary>
+    /// "Beer" — the HUD as a frosted decal on a cold pint of lager: golden amber liquid, a foam-white
+    /// surface, roast-brown text. Geometry matches Default; the glass look is a gradient + sheen overlay.
+    /// </summary>
+    public static ThemeTokenSet Beer => new()
+    {
+        PanelBackground = B(196, 124, 17, 240),
+        PanelBorder = B(122, 74, 10, 217),
+        SurfaceBackground = B(247, 239, 222, 245),
+        SecondaryBackground = B(255, 250, 238, 184),
+        Accent = B(232, 163, 23),
+        PrimaryText = B(58, 42, 18),
+        SecondaryText = B(107, 84, 48),
+        Warning = B(138, 58, 5),
+        Error = B(140, 33, 23),
+        Success = B(63, 94, 29),
+        RevealTab = B(242, 194, 85, 230),
+        TitleFont = "Segoe UI Semibold",
+        BodyFont = "Segoe UI",
+        MonoFont = "Cascadia Code, Consolas",
+        BodyFontSize = 12,
+        SmallFontSize = 10,
+        TitleFontSize = 14,
+        CornerRadius = 6,
+        PanelPadding = 10,
+        BorderWidth = 1,
+        ButtonHeight = 28,
+        LiquidGradient = true,
+        GlassSheen = true
+    };
+
+    /// <summary>
+    /// "Space" — a sci-fi cockpit HUD: near-black void, glowing cyan frames, phosphor-green readouts,
+    /// square corners with corner brackets and an accent bloom. Presentation only.
+    /// </summary>
+    public static ThemeTokenSet Space => new()
+    {
+        PanelBackground = B(6, 14, 26, 220),
+        PanelBorder = B(55, 224, 255, 115),
+        SurfaceBackground = B(7, 17, 32, 240),
+        SecondaryBackground = B(14, 30, 50, 184),
+        Accent = B(55, 224, 255),
+        PrimaryText = B(230, 246, 255),
+        SecondaryText = B(127, 166, 191),
+        Warning = B(255, 176, 32),
+        Error = B(255, 77, 94),
+        Success = B(59, 255, 158),
+        RevealTab = B(55, 224, 255, 204),
+        TitleFont = "Bahnschrift SemiBold Condensed",
+        BodyFont = "Segoe UI",
+        MonoFont = "Cascadia Code, Consolas",
+        BodyFontSize = 12,
+        SmallFontSize = 10,
+        TitleFontSize = 15,
+        CornerRadius = 0,
+        PanelPadding = 12,
+        BorderWidth = 1,
+        ButtonHeight = 30,
+        CornerBrackets = true,
+        PhosphorGlow = true
+    };
+
+    /// <summary>
+    /// "LiquidGlass" — Apple-style frosted translucent glass: blue-tinted panels, big rounded corners,
+    /// white text, an electric-blue accent. The frosted fill + specular highlight are an overlay.
+    /// </summary>
+    public static ThemeTokenSet LiquidGlass => new()
+    {
+        PanelBackground = B(18, 38, 78, 148),
+        PanelBorder = B(255, 255, 255, 71),
+        SurfaceBackground = B(24, 48, 94, 179),
+        SecondaryBackground = B(255, 255, 255, 26),
+        Accent = B(59, 130, 246),
+        PrimaryText = B(255, 255, 255),
+        SecondaryText = B(255, 255, 255, 184),
+        Warning = B(255, 194, 75),
+        Error = B(255, 107, 94),
+        Success = B(52, 211, 153),
+        RevealTab = B(59, 130, 246, 204),
+        TitleFont = "Segoe UI Variable Display Semibold, Segoe UI Semibold",
+        BodyFont = "Segoe UI Variable Text, Segoe UI",
+        MonoFont = "Cascadia Code, Consolas",
+        BodyFontSize = 13,
+        SmallFontSize = 11,
+        TitleFontSize = 17,
+        CornerRadius = 20,
+        PanelPadding = 18,
+        BorderWidth = 1,
+        ButtonHeight = 34,
+        FrostedGlass = true
     };
 
     public static ThemeTokenSet Light => new()

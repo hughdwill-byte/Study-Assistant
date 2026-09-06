@@ -3,6 +3,8 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
+using System.Windows.Shapes;
 using StudyHud.Core.Models;
 using StudyHud.Core.Services;
 
@@ -63,11 +65,19 @@ public abstract class HudPanelBase : UserControl
     {
         OuterBorder = new Border
         {
-            CornerRadius = new CornerRadius(6),
+            CornerRadius = Res("CornerRadius") is CornerRadius cr ? cr : new CornerRadius(6),
             BorderThickness = new Thickness(1),
             Padding = new Thickness(0),
             ClipToBounds = true
         };
+        // LiquidGlass: a soft drop shadow gives the floating-glass depth (shadow only — never a blur
+        // on a Border with text children).
+        if (Res("FrostedGlass") is true)
+            OuterBorder.Effect = new DropShadowEffect
+            {
+                BlurRadius = 48, ShadowDepth = 20, Direction = 270,
+                Color = Color.FromRgb(4, 14, 42), Opacity = 0.5
+            };
 
         // Edit mode drag handle at top
         EditHandleBar = new Border
@@ -139,9 +149,15 @@ public abstract class HudPanelBase : UserControl
         seGrip.MouseLeftButtonUp += OnResizeEnd;
         ResizeGrips.Children.Add(seGrip);
 
-        // Overlay panel = content stack + resize grips
+        // Overlay panel = content stack + (optional) retro overlays + resize grips.
+        // The scanline sits above content but below the corner brackets; both are
+        // non-hit-testable and only appear when the active theme opts in.
         var overlay = new Grid();
         overlay.Children.Add(stack);
+        if (Res("GlassSheen") is true) overlay.Children.Add(BuildGlassSheen());
+        if (Res("FrostedGlass") is true) overlay.Children.Add(BuildSpecularLine());
+        if (Res("PanelScanlines") is true) overlay.Children.Add(BuildScanline());
+        if (Res("PanelCornerBrackets") is true) overlay.Children.Add(BuildCornerBrackets(13));
         overlay.Children.Add(ResizeGrips);
 
         OuterBorder.Child = overlay;
@@ -149,6 +165,124 @@ public abstract class HudPanelBase : UserControl
 
         // Let subclass populate ContentGrid
         PopulateContent(ContentGrid);
+    }
+
+    private static object? Res(string key) => Application.Current?.TryFindResource(key);
+
+    /// <summary>Accent brush for the retro overlays, falling back to a hot amber.</summary>
+    private static Brush AccentBrush() =>
+        Res("Accent") as Brush ?? new SolidColorBrush(Color.FromRgb(255, 122, 26));
+
+    /// <summary>Beer: the vertical amber "liquid" gradient used to fill panels.</summary>
+    private static Brush LiquidBrush()
+    {
+        var g = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1) };
+        g.GradientStops.Add(new GradientStop(Color.FromRgb(0xF3, 0xBB, 0x3C), 0.0));
+        g.GradientStops.Add(new GradientStop(Color.FromRgb(0xE5, 0xA3, 0x20), 0.32));
+        g.GradientStops.Add(new GradientStop(Color.FromRgb(0xC4, 0x80, 0x0F), 0.70));
+        g.GradientStops.Add(new GradientStop(Color.FromRgb(0xA2, 0x65, 0x0A), 1.0));
+        return g;
+    }
+
+    /// <summary>
+    /// Beer: a wet-glass sheen — a bright specular strip down the left inset and a thinner refraction
+    /// strip at the right edge. Non-hit-testable; only added when the theme sets <c>GlassSheen</c>.
+    /// </summary>
+    private static Grid BuildGlassSheen()
+    {
+        var grid = new Grid { IsHitTestVisible = false };
+
+        var left = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 0) };
+        left.GradientStops.Add(new GradientStop(Color.FromArgb(140, 255, 255, 255), 0.0));
+        left.GradientStops.Add(new GradientStop(Color.FromArgb(12, 255, 255, 255), 1.0));
+        grid.Children.Add(new Rectangle
+        {
+            Width = 24, HorizontalAlignment = HorizontalAlignment.Left, Fill = left, IsHitTestVisible = false
+        });
+
+        var right = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 0) };
+        right.GradientStops.Add(new GradientStop(Color.FromArgb(46, 120, 70, 10), 0.0));
+        right.GradientStops.Add(new GradientStop(Color.FromArgb(76, 255, 255, 255), 1.0));
+        grid.Children.Add(new Rectangle
+        {
+            Width = 12, HorizontalAlignment = HorizontalAlignment.Right, Fill = right, IsHitTestVisible = false
+        });
+        return grid;
+    }
+
+    /// <summary>LiquidGlass: the 165° frosted blue-glass fill layered over the flat panel tint.</summary>
+    private static Brush GlassFillBrush()
+    {
+        var g = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0.26, 1) };
+        g.GradientStops.Add(new GradientStop(Color.FromArgb(56, 255, 255, 255), 0.0));   // white 0.22
+        g.GradientStops.Add(new GradientStop(Color.FromArgb(33, 96, 140, 220), 0.45));   // blue 0.13
+        g.GradientStops.Add(new GradientStop(Color.FromArgb(140, 18, 38, 78), 1.0));     // navy 0.55
+        return g;
+    }
+
+    /// <summary>
+    /// LiquidGlass: a 1px specular highlight inset from each end of the panel's top edge. Non-hit-testable.
+    /// </summary>
+    private static Rectangle BuildSpecularLine()
+    {
+        var b = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 0) };
+        b.GradientStops.Add(new GradientStop(Color.FromArgb(0, 255, 255, 255), 0.1));
+        b.GradientStops.Add(new GradientStop(Color.FromArgb(242, 255, 255, 255), 0.5));
+        b.GradientStops.Add(new GradientStop(Color.FromArgb(0, 255, 255, 255), 0.9));
+        return new Rectangle
+        {
+            Height = 1, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(12, 2, 12, 0),
+            Fill = b, IsHitTestVisible = false
+        };
+    }
+
+    /// <summary>
+    /// A non-hit-testable scanline overlay: a 3×3 tile painting one 3×1 faint-amber line, giving
+    /// the CRT look. Only added when the theme sets <c>PanelScanlines</c>.
+    /// </summary>
+    private static Rectangle BuildScanline()
+    {
+        var line = new GeometryDrawing
+        {
+            Brush = new SolidColorBrush(Color.FromArgb(14, 255, 122, 26)), // ~5.5% alpha
+            Geometry = new RectangleGeometry(new Rect(0, 0, 3, 1))
+        };
+        var brush = new DrawingBrush(line)
+        {
+            TileMode = TileMode.Tile,
+            Viewport = new Rect(0, 0, 3, 3),
+            ViewportUnits = BrushMappingMode.Absolute,
+            Stretch = Stretch.None
+        };
+        return new Rectangle { Fill = brush, IsHitTestVisible = false };
+    }
+
+    /// <summary>
+    /// Four L-shaped 1px corner brackets drawn on top of the frame, inset by -1px so they overlap
+    /// the border. Only added when the theme sets <c>PanelCornerBrackets</c>.
+    /// </summary>
+    private static Grid BuildCornerBrackets(double size)
+    {
+        var accent = AccentBrush();
+        var grid = new Grid { IsHitTestVisible = false };
+
+        Border Corner(HorizontalAlignment h, VerticalAlignment v, Thickness edges) => new()
+        {
+            Width = size,
+            Height = size,
+            HorizontalAlignment = h,
+            VerticalAlignment = v,
+            Margin = new Thickness(-1),
+            BorderBrush = accent,
+            BorderThickness = edges,
+            IsHitTestVisible = false
+        };
+
+        grid.Children.Add(Corner(HorizontalAlignment.Left, VerticalAlignment.Top, new Thickness(1, 1, 0, 0)));
+        grid.Children.Add(Corner(HorizontalAlignment.Right, VerticalAlignment.Top, new Thickness(0, 1, 1, 0)));
+        grid.Children.Add(Corner(HorizontalAlignment.Left, VerticalAlignment.Bottom, new Thickness(1, 0, 0, 1)));
+        grid.Children.Add(Corner(HorizontalAlignment.Right, VerticalAlignment.Bottom, new Thickness(0, 0, 1, 1)));
+        return grid;
     }
 
     /// <summary>Subclasses implement this to fill the panel content area.</summary>
@@ -214,7 +348,11 @@ public abstract class HudPanelBase : UserControl
         var border = Application.Current.TryFindResource("PanelBorder") as Brush
                      ?? new SolidColorBrush(Color.FromRgb(60, 60, 70));
 
-        OuterBorder.Background = bg;
+        // Beer paints panels as amber "liquid"; LiquidGlass uses a frosted blue-glass gradient;
+        // every other theme uses the flat panel token.
+        OuterBorder.Background = Res("LiquidGradient") is true ? LiquidBrush()
+            : Res("FrostedGlass") is true ? GlassFillBrush()
+            : bg;
         OuterBorder.BorderBrush = border;
     }
 

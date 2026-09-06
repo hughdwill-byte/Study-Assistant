@@ -52,6 +52,27 @@ public sealed class MacroManager
         Apply(specs);
     }
 
+    /// <summary>Runs a macro once, now (used by the editor's Play button and recorded-click macros).</summary>
+    public void PlayOnce(MacroSpec spec) => _engine.Enqueue(spec.ToDefinition());
+
+    /// <summary>Whether the macro is currently auto-repeating.</summary>
+    public bool IsRepeating(MacroSpec spec) => _engine.IsRepeating(spec.Id);
+
+    /// <summary>
+    /// Toggles auto-repeat for a macro and returns the new running state. Uses the spec's
+    /// <see cref="MacroSpec.RepeatIntervalMs"/>, falling back to 1000 ms when it is unset.
+    /// </summary>
+    public bool ToggleRepeat(MacroSpec spec)
+    {
+        if (_engine.IsRepeating(spec.Id))
+        {
+            _engine.StopRepeat(spec.Id);
+            return false;
+        }
+        _engine.StartRepeat(spec.ToDefinition(), spec.RepeatIntervalMs > 0 ? spec.RepeatIntervalMs : 1000);
+        return true;
+    }
+
     private void OnInput(object? sender, GlobalInputEventArgs e)
     {
         // Hotkey events run the mapped macro directly; mouse/other events go through trigger matching.
@@ -69,6 +90,9 @@ public sealed class MacroManager
     private void Apply(IReadOnlyList<MacroSpec> specs)
     {
         Specs = specs;
+
+        // Stop any running auto-repeat — the definitions are about to be replaced.
+        _engine.StopAllRepeats();
 
         // Drop the previous hotkey registrations before adding the new set.
         foreach (var id in _registeredHotkeyIds)

@@ -158,6 +158,7 @@ public partial class App : Application
                 services.AddSingleton<GlobalInputService>();
                 services.AddSingleton<IGlobalInputService>(sp => sp.GetRequiredService<GlobalInputService>());
                 services.AddSingleton<HoldToInteractService>();
+                services.AddSingleton<IMouseClickRecorder, MouseClickRecorder>();
                 services.AddSingleton<IForegroundWindowService>(sp =>
                     new ForegroundWindowService(
                         sp.GetRequiredService<ILogger<ForegroundWindowService>>(),

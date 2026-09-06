@@ -46,7 +46,8 @@ public enum MacroActionType
     CaptureRegion, CopyToClipboard, Paste,
     CollapsePanel, ExpandPanel, TogglePanelCollapse,
     SwitchWorkspace, SwitchMacroProfile,
-    HideHud, ShowHud, ToggleHud
+    HideHud, ShowHud, ToggleHud,
+    MouseClick
 }
 
 public enum MacroFailureBehaviour { StopMacro, Continue }
@@ -122,6 +123,18 @@ public record OpenUrlAction : MacroAction
 {
     public OpenUrlAction() => ActionType = MacroActionType.OpenUrl;
     public required string Url { get; init; }
+}
+
+/// <summary>
+/// Moves the cursor to a screen point and clicks it (used by recorded mouse macros, spec §36).
+/// Coordinates are absolute virtual-desktop pixels; <see cref="Button"/> is 1 = left, 2 = right.
+/// </summary>
+public record MouseClickAction : MacroAction
+{
+    public MouseClickAction() => ActionType = MacroActionType.MouseClick;
+    public required int X { get; init; }
+    public required int Y { get; init; }
+    public int Button { get; init; } = 1;
 }
 
 public record LaunchProgramAction : MacroAction
