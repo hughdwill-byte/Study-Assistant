@@ -26,9 +26,9 @@ public sealed class FocusTimerPanel : HudPanelBase
         : base("focus-timer-panel", appState, theme)
     {
         _pomodoro = pomodoro;
-        MinWidth = 200;
+        MinWidth = 240;
         MinHeight = 150;
-        Width = 300;
+        Width = 372;
     }
 
     protected override string PanelTitle => "Focus Timer";
