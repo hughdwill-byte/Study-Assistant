@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -120,9 +121,11 @@ public abstract class HudPanelBase : UserControl
         barLayout.Children.Add(dragLabel);
         EditHandleBar.Child = barLayout;
 
-        EditHandleBar.MouseLeftButtonDown += OnDragStart;
-        EditHandleBar.MouseMove += OnDragMove;
-        EditHandleBar.MouseLeftButtonUp += OnDragEnd;
+        // Dragging works from anywhere on the panel in Edit mode (not just the thin handle bar),
+        // so it's easy to grab. Clicks on buttons/inputs are excluded in OnDragStart.
+        OuterBorder.MouseLeftButtonDown += OnDragStart;
+        OuterBorder.MouseMove += OnDragMove;
+        OuterBorder.MouseLeftButtonUp += OnDragEnd;
 
         // Main content placeholder — subclasses fill this
         ContentGrid = new Grid();
@@ -137,12 +140,13 @@ public abstract class HudPanelBase : UserControl
         ResizeGrips = new Grid { Visibility = Visibility.Collapsed };
         var seGrip = new Border
         {
-            Width = 10, Height = 10,
+            Width = 18, Height = 18,
             Background = (Brush)(Application.Current.TryFindResource("Accent") ?? Brushes.DodgerBlue),
             CornerRadius = new CornerRadius(0, 0, 4, 0),
             Cursor = Cursors.SizeNWSE,
             HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Bottom
+            VerticalAlignment = VerticalAlignment.Bottom,
+            ToolTip = "Drag to resize"
         };
         seGrip.MouseLeftButtonDown += OnResizeStart;
         seGrip.MouseMove += OnResizeMove;
@@ -314,6 +318,7 @@ public abstract class HudPanelBase : UserControl
             case HudInteractionState.Ghost:
                 IsHitTestVisible = false;
                 OuterBorder.Opacity = 0.85;
+                OuterBorder.Cursor = null;
                 EditHandleBar.Visibility = Visibility.Collapsed;
                 ResizeGrips.Visibility = Visibility.Collapsed;
                 break;
@@ -321,6 +326,7 @@ public abstract class HudPanelBase : UserControl
             case HudInteractionState.Active:
                 IsHitTestVisible = true;
                 OuterBorder.Opacity = 1.0;
+                OuterBorder.Cursor = null;
                 EditHandleBar.Visibility = Visibility.Collapsed;
                 ResizeGrips.Visibility = Visibility.Collapsed;
                 break;
@@ -328,6 +334,7 @@ public abstract class HudPanelBase : UserControl
             case HudInteractionState.Edit:
                 IsHitTestVisible = true;
                 OuterBorder.Opacity = 1.0;
+                OuterBorder.Cursor = Cursors.SizeAll; // whole panel is draggable while calibrating
                 EditHandleBar.Visibility = Visibility.Visible;
                 ResizeGrips.Visibility = Visibility.Visible;
                 break;
@@ -367,8 +374,8 @@ public abstract class HudPanelBase : UserControl
 
     private void OnDragStart(object sender, MouseButtonEventArgs e)
     {
-        if (e.OriginalSource is Button) return; // clicking the ✕ close box must not begin a drag
         if (_appState.Current.HudInteractionState != HudInteractionState.Edit) return;
+        if (IsInteractive(e.OriginalSource)) return; // clicks on buttons/inputs act, not drag
         _isDragging = true;
         _dragStart = e.GetPosition(null);
         var parent = Parent as Canvas ?? VisualTreeHelper.GetParent(this) as Canvas;
@@ -377,6 +384,15 @@ public abstract class HudPanelBase : UserControl
             : new Point(0, 0);
         ((UIElement)sender).CaptureMouse();
         e.Handled = true;
+    }
+
+    /// <summary>True if the click landed on an interactive control, so a drag should not start.</summary>
+    private static bool IsInteractive(object? source)
+    {
+        for (var d = source as DependencyObject; d != null; d = VisualTreeHelper.GetParent(d))
+            if (d is ButtonBase or TextBoxBase or ComboBox or Slider or System.Windows.Controls.Primitives.ScrollBar)
+                return true;
+        return false;
     }
 
     private void OnDragMove(object sender, MouseEventArgs e)
