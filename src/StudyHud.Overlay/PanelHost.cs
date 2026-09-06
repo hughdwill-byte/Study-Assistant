@@ -97,7 +97,8 @@ public sealed class PanelHost : Canvas
     private void UpdateFocusPanelPresence()
     {
         if (_focusPanel == null) return;
-        bool active = _pomodoro.Phase != PomodoroPhase.Idle;
+        bool active = _pomodoro.Phase != PomodoroPhase.Idle
+                      || _appState.Current.HudInteractionState == HudInteractionState.Edit;
         bool present = Children.Contains(_focusPanel);
         if (active && !present) Children.Add(_focusPanel);
         else if (!active && present) Children.Remove(_focusPanel);
@@ -109,6 +110,11 @@ public sealed class PanelHost : Canvas
         {
             if (e.Previous.CurrentWorkspace != e.Current.CurrentWorkspace)
                 SwitchWorkspacePanels(e.Current.CurrentWorkspace);
+
+            // Entering/leaving Calibrate (Edit) shows/hides the Focus panel so it can be positioned
+            // even when the timer isn't running.
+            if (e.Previous.HudInteractionState != e.Current.HudInteractionState)
+                UpdateFocusPanelPresence();
 
             // In Ghost mode the whole window is WS_EX_TRANSPARENT — no hit testing needed here.
             // In Active/Edit mode the window is interactive.

@@ -73,6 +73,7 @@
                     BorderBrush="{DynamicResource PanelBorder}"
                     BorderThickness="0,0,1,0"
                     Padding="0,8">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <StackPanel>
                     <TextBlock Text="STUDY HUD" Margin="16,8,16,4"
                                FontSize="10" Opacity="0.5"
@@ -108,6 +109,7 @@
                     <Button Content="Quit Study HUD" Margin="8,10,8,2"
                             Background="{DynamicResource ErrorColour}" Click="OnQuit"/>
                 </StackPanel>
+                </ScrollViewer>
             </Border>
 
             <!-- Main panel (pages rendered here) -->
