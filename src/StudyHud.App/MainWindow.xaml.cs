@@ -176,6 +176,38 @@ public partial class MainWindow : Window
     private async void OnToggleAssessmentMode(object sender, RoutedEventArgs e)
         => await _appState.SetAssessmentModeAsync(!_policy.IsAssessmentModeActive);
 
+    // Calibrate Mode: puts the floating HUD into Edit interaction state so its panels can be dragged
+    // and resized, then saves the layout when the user finishes (spec §11, §19).
+    private bool _calibrating;
+
+    private void OnToggleCalibrate(object sender, RoutedEventArgs e)
+    {
+        _calibrating = !_calibrating;
+        if (_calibrating)
+        {
+            _appState.SetHudVisible(true);
+            _appState.SetHudInteractionState(HudInteractionState.Edit);
+            CalibrateButton.Content = "Finish calibrating";
+            _logger.LogInformation("Calibrate mode ON — HUD panels are movable/resizable.");
+        }
+        else
+        {
+            _appState.SetHudInteractionState(HudInteractionState.Ghost);
+            CalibrateButton.Content = "Calibrate HUD";
+            _ = _services.GetRequiredService<StudyHud.Overlay.WorkspaceCoordinator>().SaveCurrentAsync();
+            _logger.LogInformation("Calibrate mode OFF — HUD layout saved.");
+        }
+    }
+
+    private void OnMoveHud(object sender, RoutedEventArgs e)
+    {
+        var next = _services.GetRequiredService<StudyHud.Overlay.OverlayManager>().MoveToNextMonitor();
+        if (next == null)
+            MessageBox.Show(
+                "Only one monitor detected — there's nowhere else to move the HUD.",
+                "Study HUD", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
     private void OnToggleHudVisibility(object sender, RoutedEventArgs e)
         => _appState.SetHudVisible(!_appState.Current.HudVisible);
 

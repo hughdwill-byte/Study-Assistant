@@ -82,6 +82,13 @@ public record StudyHudSettings
     /// <summary>Whether the small control capsule is shown (spec §23).</summary>
     public bool ShowControlCapsule { get; init; } = true;
 
+    // ── HUD placement (spec §4, §171) ────────────────────────────────────────
+    /// <summary>
+    /// The monitor the floating HUD lives on. The HUD shows on exactly one monitor at a time; the user
+    /// moves it between monitors from the main window. null = the primary monitor.
+    /// </summary>
+    public string? ActiveMonitorId { get; init; }
+
     // ── Focus Mode / Pomodoro ────────────────────────────────────────────────
     public int FocusMinutes { get; init; } = 25;
     public int ShortBreakMinutes { get; init; } = 5;

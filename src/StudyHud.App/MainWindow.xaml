@@ -98,6 +98,9 @@
                                Foreground="{DynamicResource SecondaryText}"/>
 
                     <Button Content="Focus" Margin="8,2" Click="OnShowFocus"/>
+                    <Button x:Name="CalibrateButton" Content="Calibrate HUD" Margin="8,2"
+                            Click="OnToggleCalibrate"/>
+                    <Button Content="Move HUD to next screen" Margin="8,2" Click="OnMoveHud"/>
                     <Button Content="Assessment Mode" Margin="8,2"
                             Click="OnToggleAssessmentMode"/>
                     <Button Content="Themes" Margin="8,2" Click="OnShowThemes"/>
