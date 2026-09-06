@@ -145,6 +145,7 @@ public abstract class HudPanelBase : UserControl
         // non-hit-testable and only appear when the active theme opts in.
         var overlay = new Grid();
         overlay.Children.Add(stack);
+        if (Res("GlassSheen") is true) overlay.Children.Add(BuildGlassSheen());
         if (Res("PanelScanlines") is true) overlay.Children.Add(BuildScanline());
         if (Res("PanelCornerBrackets") is true) overlay.Children.Add(BuildCornerBrackets(13));
         overlay.Children.Add(ResizeGrips);
@@ -161,6 +162,43 @@ public abstract class HudPanelBase : UserControl
     /// <summary>Accent brush for the retro overlays, falling back to a hot amber.</summary>
     private static Brush AccentBrush() =>
         Res("Accent") as Brush ?? new SolidColorBrush(Color.FromRgb(255, 122, 26));
+
+    /// <summary>Beer: the vertical amber "liquid" gradient used to fill panels.</summary>
+    private static Brush LiquidBrush()
+    {
+        var g = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1) };
+        g.GradientStops.Add(new GradientStop(Color.FromRgb(0xF3, 0xBB, 0x3C), 0.0));
+        g.GradientStops.Add(new GradientStop(Color.FromRgb(0xE5, 0xA3, 0x20), 0.32));
+        g.GradientStops.Add(new GradientStop(Color.FromRgb(0xC4, 0x80, 0x0F), 0.70));
+        g.GradientStops.Add(new GradientStop(Color.FromRgb(0xA2, 0x65, 0x0A), 1.0));
+        return g;
+    }
+
+    /// <summary>
+    /// Beer: a wet-glass sheen — a bright specular strip down the left inset and a thinner refraction
+    /// strip at the right edge. Non-hit-testable; only added when the theme sets <c>GlassSheen</c>.
+    /// </summary>
+    private static Grid BuildGlassSheen()
+    {
+        var grid = new Grid { IsHitTestVisible = false };
+
+        var left = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 0) };
+        left.GradientStops.Add(new GradientStop(Color.FromArgb(140, 255, 255, 255), 0.0));
+        left.GradientStops.Add(new GradientStop(Color.FromArgb(12, 255, 255, 255), 1.0));
+        grid.Children.Add(new Rectangle
+        {
+            Width = 24, HorizontalAlignment = HorizontalAlignment.Left, Fill = left, IsHitTestVisible = false
+        });
+
+        var right = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 0) };
+        right.GradientStops.Add(new GradientStop(Color.FromArgb(46, 120, 70, 10), 0.0));
+        right.GradientStops.Add(new GradientStop(Color.FromArgb(76, 255, 255, 255), 1.0));
+        grid.Children.Add(new Rectangle
+        {
+            Width = 12, HorizontalAlignment = HorizontalAlignment.Right, Fill = right, IsHitTestVisible = false
+        });
+        return grid;
+    }
 
     /// <summary>
     /// A non-hit-testable scanline overlay: a 3×3 tile painting one 3×1 faint-amber line, giving
@@ -274,7 +312,8 @@ public abstract class HudPanelBase : UserControl
         var border = Application.Current.TryFindResource("PanelBorder") as Brush
                      ?? new SolidColorBrush(Color.FromRgb(60, 60, 70));
 
-        OuterBorder.Background = bg;
+        // Beer paints panels as amber "liquid"; every other theme uses the flat panel token.
+        OuterBorder.Background = Res("LiquidGradient") is true ? LiquidBrush() : bg;
         OuterBorder.BorderBrush = border;
     }
 

@@ -39,6 +39,7 @@ public sealed class FocusView : UserControl
     // Presentation flags/geometry read once from the active theme's tokens.
     private readonly bool _segmented;
     private readonly bool _glow;
+    private readonly bool _liquid;
     private readonly CornerRadius _radius;
     private const int SegmentCount = 16;
 
@@ -50,6 +51,7 @@ public sealed class FocusView : UserControl
 
         _segmented = TryFindResource("SegmentedProgress") is true;
         _glow = TryFindResource("PhosphorGlow") is true;
+        _liquid = TryFindResource("LiquidGradient") is true;
         _radius = TryFindResource("CornerRadius") is CornerRadius cr ? cr : new CornerRadius(6);
 
         var root = new StackPanel { Margin = new Thickness(4) };
@@ -70,7 +72,8 @@ public sealed class FocusView : UserControl
         // ── Timer card (artboard 1b) ─────────────────────────────────────────
         var card = new Border
         {
-            Background = Brush("SecondaryBackground", Color.FromArgb(180, 40, 40, 48)),
+            // Beer paints the card as amber "liquid"; other themes use the flat surface token.
+            Background = _liquid ? LiquidBrush() : Brush("SecondaryBackground", Color.FromArgb(180, 40, 40, 48)),
             BorderBrush = Brush("PanelBorder", Color.FromRgb(60, 60, 70)),
             BorderThickness = new Thickness(1),
             CornerRadius = _radius,
@@ -79,11 +82,21 @@ public sealed class FocusView : UserControl
         };
         var cardStack = new StackPanel { MinWidth = 340 };
 
+        // Beer: a foam-white band across the top of the glass.
+        if (_liquid)
+            cardStack.Children.Add(new Border
+            {
+                Height = 14, Margin = new Thickness(-20, -20, -20, 12),
+                Background = FoamBrush(),
+                CornerRadius = new CornerRadius(_radius.TopLeft, _radius.TopRight, 0, 0)
+            });
+
         _phase = new TextBlock
         {
             Text = "READY", FontSize = 11, Opacity = 0.85,
             HorizontalAlignment = HorizontalAlignment.Center,
-            Foreground = Brush("Accent", Color.FromRgb(0, 180, 255)),
+            // On the amber glass the accent has poor contrast, so Beer uses roast-brown text.
+            Foreground = _liquid ? Brush("PrimaryText", Colors.White) : Brush("Accent", Color.FromRgb(0, 180, 255)),
             FontFamily = new FontFamily("Cascadia Code, Consolas"),
             Effect = Glow(0.55, 14)
         };
@@ -372,10 +385,37 @@ public sealed class FocusView : UserControl
         Effect = accent ? Glow(0.4, 12) : null
     };
 
-    /// <summary>A phosphor glow for Retro, or null under themes that don't set PhosphorGlow.</summary>
-    private DropShadowEffect? Glow(double opacity, double blur) => _glow
-        ? new DropShadowEffect { Color = Color.FromRgb(255, 122, 26), BlurRadius = blur, ShadowDepth = 0, Opacity = opacity }
-        : null;
+    /// <summary>
+    /// An accent-coloured bloom for themes that set PhosphorGlow (amber under Retro, cyan under
+    /// Space), or null otherwise.
+    /// </summary>
+    private DropShadowEffect? Glow(double opacity, double blur)
+    {
+        if (!_glow) return null;
+        var c = (Brush("Accent", Color.FromRgb(255, 122, 26)) as SolidColorBrush)?.Color
+                ?? Color.FromRgb(255, 122, 26);
+        return new DropShadowEffect { Color = c, BlurRadius = blur, ShadowDepth = 0, Opacity = opacity };
+    }
+
+    /// <summary>Beer: the vertical amber "liquid" gradient used as the card fill.</summary>
+    private static Brush LiquidBrush()
+    {
+        var g = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1) };
+        g.GradientStops.Add(new GradientStop(Color.FromRgb(0xF3, 0xBB, 0x3C), 0.0));
+        g.GradientStops.Add(new GradientStop(Color.FromRgb(0xE5, 0xA3, 0x20), 0.32));
+        g.GradientStops.Add(new GradientStop(Color.FromRgb(0xC4, 0x80, 0x0F), 0.70));
+        g.GradientStops.Add(new GradientStop(Color.FromRgb(0xA2, 0x65, 0x0A), 1.0));
+        return g;
+    }
+
+    /// <summary>Beer: the foam-white gradient used for the card's top band.</summary>
+    private static Brush FoamBrush()
+    {
+        var g = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1) };
+        g.GradientStops.Add(new GradientStop(Color.FromRgb(0xFF, 0xFF, 0xFF), 0.0));
+        g.GradientStops.Add(new GradientStop(Color.FromRgb(0xF1, 0xE7, 0xCF), 1.0));
+        return g;
+    }
 
     private TextBlock SessionLabel(string text, Thickness margin) => new()
     {

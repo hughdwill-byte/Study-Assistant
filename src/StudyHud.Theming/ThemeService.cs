@@ -27,7 +27,7 @@ public sealed class ThemeService : IThemeService
         ApplyTheme("Default");
     }
 
-    public IReadOnlyList<string> AvailableThemeIds => ["Default", "Dark", "Light", "Retro"];
+    public IReadOnlyList<string> AvailableThemeIds => ["Default", "Dark", "Light", "Retro", "Beer", "Space"];
     public string CurrentThemeId => _currentThemeId;
 
     public object? GetResource(string tokenKey) =>
@@ -47,6 +47,12 @@ public sealed class ThemeService : IThemeService
                 break;
             case "Retro":
                 ApplyTokenSet(ThemeTokens.Retro);
+                break;
+            case "Beer":
+                ApplyTokenSet(ThemeTokens.Beer);
+                break;
+            case "Space":
+                ApplyTokenSet(ThemeTokens.Space);
                 break;
             default: // "Default" — neutral polished dark
                 ApplyTokenSet(ThemeTokens.Default);
@@ -108,6 +114,8 @@ public sealed class ThemeService : IThemeService
         Set("PanelScanlines", tokens.Scanlines);
         Set("SegmentedProgress", tokens.SegmentedProgress);
         Set("PhosphorGlow", tokens.PhosphorGlow);
+        Set("LiquidGradient", tokens.LiquidGradient);
+        Set("GlassSheen", tokens.GlassSheen);
 
         // Typography
         Set("TitleFontFamily", new FontFamily(tokens.TitleFont));
@@ -193,11 +201,14 @@ internal record ThemeTokenSet
     public required double ButtonHeight { get; init; }
 
     // Presentation primitives — additive, theme-agnostic. Default false so existing
-    // themes are unaffected; the Retro theme opts in to all four.
+    // themes are unaffected. Retro uses brackets/scanlines/segments/glow; Space uses
+    // brackets + glow (cyan, from Accent); Beer uses the liquid gradient + glass sheen.
     public bool CornerBrackets { get; init; }
     public bool Scanlines { get; init; }
     public bool SegmentedProgress { get; init; }
     public bool PhosphorGlow { get; init; }
+    public bool LiquidGradient { get; init; }
+    public bool GlassSheen { get; init; }
 }
 
 internal static class ThemeTokens
@@ -271,6 +282,68 @@ internal static class ThemeTokens
         CornerBrackets = true,
         Scanlines = true,
         SegmentedProgress = true,
+        PhosphorGlow = true
+    };
+
+    /// <summary>
+    /// "Beer" — the HUD as a frosted decal on a cold pint of lager: golden amber liquid, a foam-white
+    /// surface, roast-brown text. Geometry matches Default; the glass look is a gradient + sheen overlay.
+    /// </summary>
+    public static ThemeTokenSet Beer => new()
+    {
+        PanelBackground = B(196, 124, 17, 240),
+        PanelBorder = B(122, 74, 10, 217),
+        SurfaceBackground = B(247, 239, 222, 245),
+        SecondaryBackground = B(255, 250, 238, 184),
+        Accent = B(232, 163, 23),
+        PrimaryText = B(58, 42, 18),
+        SecondaryText = B(107, 84, 48),
+        Warning = B(138, 58, 5),
+        Error = B(140, 33, 23),
+        Success = B(63, 94, 29),
+        RevealTab = B(242, 194, 85, 230),
+        TitleFont = "Segoe UI Semibold",
+        BodyFont = "Segoe UI",
+        MonoFont = "Cascadia Code, Consolas",
+        BodyFontSize = 12,
+        SmallFontSize = 10,
+        TitleFontSize = 14,
+        CornerRadius = 6,
+        PanelPadding = 10,
+        BorderWidth = 1,
+        ButtonHeight = 28,
+        LiquidGradient = true,
+        GlassSheen = true
+    };
+
+    /// <summary>
+    /// "Space" — a sci-fi cockpit HUD: near-black void, glowing cyan frames, phosphor-green readouts,
+    /// square corners with corner brackets and an accent bloom. Presentation only.
+    /// </summary>
+    public static ThemeTokenSet Space => new()
+    {
+        PanelBackground = B(6, 14, 26, 220),
+        PanelBorder = B(55, 224, 255, 115),
+        SurfaceBackground = B(7, 17, 32, 240),
+        SecondaryBackground = B(14, 30, 50, 184),
+        Accent = B(55, 224, 255),
+        PrimaryText = B(230, 246, 255),
+        SecondaryText = B(127, 166, 191),
+        Warning = B(255, 176, 32),
+        Error = B(255, 77, 94),
+        Success = B(59, 255, 158),
+        RevealTab = B(55, 224, 255, 204),
+        TitleFont = "Bahnschrift SemiBold Condensed",
+        BodyFont = "Segoe UI",
+        MonoFont = "Cascadia Code, Consolas",
+        BodyFontSize = 12,
+        SmallFontSize = 10,
+        TitleFontSize = 15,
+        CornerRadius = 0,
+        PanelPadding = 12,
+        BorderWidth = 1,
+        ButtonHeight = 30,
+        CornerBrackets = true,
         PhosphorGlow = true
     };
 
