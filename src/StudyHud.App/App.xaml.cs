@@ -175,6 +175,7 @@ public partial class App : Application
                     sp.GetRequiredService<IQuestionFinder>(),
                     sp.GetRequiredService<IAssessmentPolicyService>(),
                     sp.GetRequiredService<ISettingsStore>(),
+                    sp.GetRequiredService<PomodoroService>(),
                     sp.GetRequiredService<ILogger<OverlayManager>>()));
 
                 // ── Capture ──────────────────────────────────────────────────

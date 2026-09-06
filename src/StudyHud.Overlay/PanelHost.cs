@@ -22,9 +22,11 @@ public sealed class PanelHost : Canvas
     private readonly ICaptureService _capture;
     private readonly IQuestionFinder _finder;
     private readonly IAssessmentPolicyService _policy;
+    private readonly PomodoroService _pomodoro;
 
     private readonly List<HudPanelBase> _panels = [];
     private ControlCapsule? _capsule;
+    private FocusTimerPanel? _focusPanel;
 
     /// <summary>The monitor this host renders panels for.</summary>
     public string MonitorId => _monitor.MonitorId;
@@ -35,7 +37,8 @@ public sealed class PanelHost : Canvas
         IThemeService theme,
         ICaptureService capture,
         IQuestionFinder finder,
-        IAssessmentPolicyService policy)
+        IAssessmentPolicyService policy,
+        PomodoroService pomodoro)
     {
         _monitor = monitor;
         _appState = appState;
@@ -43,20 +46,28 @@ public sealed class PanelHost : Canvas
         _capture = capture;
         _finder = finder;
         _policy = policy;
+        _pomodoro = pomodoro;
 
         Background = Brushes.Transparent;
         SnapsToDevicePixels = true;
 
         _appState.StateChanged += OnStateChanged;
         Loaded += OnLoaded;
-        Unloaded += (_, _) => _appState.StateChanged -= OnStateChanged;
+        Unloaded += (_, _) =>
+        {
+            _appState.StateChanged -= OnStateChanged;
+            _pomodoro.PhaseChanged -= OnPomodoroPhaseChanged;
+        };
     }
+
+    private bool _populated;
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        // Only populate the primary monitor or the first monitor with panels
-        if (_monitor.IsPrimary)
-            PopulatePanels();
+        // The HUD lives on exactly one monitor (this host's), so always populate it — do it once.
+        if (_populated) return;
+        _populated = true;
+        PopulatePanels();
     }
 
     private void PopulatePanels()
@@ -67,8 +78,29 @@ public sealed class PanelHost : Canvas
         Canvas.SetBottom(_capsule, 16);
         Children.Add(_capsule);
 
+        // Floating Focus-Mode timer — workspace-independent; shown only while a session is active,
+        // so starting the timer (from here or the settings Focus page) pops it up as a HUD box.
+        _focusPanel = new FocusTimerPanel(_appState, _theme, _pomodoro);
+        Canvas.SetLeft(_focusPanel, 16);
+        Canvas.SetTop(_focusPanel, 16);
+        _pomodoro.PhaseChanged += OnPomodoroPhaseChanged;
+        UpdateFocusPanelPresence();
+
         // Default panel layout based on current workspace
         SwitchWorkspacePanels(_appState.Current.CurrentWorkspace);
+    }
+
+    private void OnPomodoroPhaseChanged(object? sender, EventArgs e)
+        => Dispatcher.BeginInvoke(UpdateFocusPanelPresence);
+
+    /// <summary>Adds the Focus timer panel to the canvas while a session runs; removes it when idle.</summary>
+    private void UpdateFocusPanelPresence()
+    {
+        if (_focusPanel == null) return;
+        bool active = _pomodoro.Phase != PomodoroPhase.Idle;
+        bool present = Children.Contains(_focusPanel);
+        if (active && !present) Children.Add(_focusPanel);
+        else if (!active && present) Children.Remove(_focusPanel);
     }
 
     private void OnStateChanged(object? sender, ApplicationStateChangedEventArgs e)

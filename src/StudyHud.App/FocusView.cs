@@ -5,6 +5,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using StudyHud.Core.Services;
+using StudyHud.Overlay;
 
 namespace StudyHud.App;
 
