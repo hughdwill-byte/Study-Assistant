@@ -1,6 +1,6 @@
 using System.Windows.Threading;
 
-namespace StudyHud.App;
+namespace StudyHud.Overlay;
 
 public enum PomodoroPhase { Idle, Work, ShortBreak, LongBreak }
 
@@ -8,7 +8,8 @@ public enum PomodoroPhase { Idle, Work, ShortBreak, LongBreak }
 /// A simple local Pomodoro timer for Focus Mode (spec §66 — presentation/study aid, no network).
 /// Auto-advances Work → Break → Work; a long break after every <see cref="LongBreakEvery"/> work
 /// intervals. Runs on the UI thread via a <see cref="DispatcherTimer"/>. Singleton so the Focus page
-/// and any HUD element share one clock.
+/// and the floating Focus HUD panel share one clock. Lives in the Overlay project so the HUD panel
+/// (and the settings page, via the App reference) can both use it.
 /// </summary>
 public sealed class PomodoroService
 {
