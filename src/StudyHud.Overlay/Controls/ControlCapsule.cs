@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using StudyHud.Core.Models;
 using StudyHud.Core.Services;
@@ -7,18 +8,17 @@ using StudyHud.Core.Services;
 namespace StudyHud.Overlay.Controls;
 
 /// <summary>
-/// The small persistent control capsule (spec §23, §162).
-/// Always visible even in Ghost mode (uses its own interactive island HWND in production;
-/// in Phase 2 it's embedded in the overlay window and becomes interactive with the HUD).
-/// Shows: [workspace] [course] [assessment status]
+/// The small persistent control capsule (spec §23, §162): a themed pill with a drag grip, three
+/// quick-action buttons (Question Finder, toggle HUD, Note Taking) and the current workspace short-code.
+/// Themed via the same semantic tokens as the panels. Actions use application state only — no new
+/// behaviour or dependencies.
 /// </summary>
 public sealed class ControlCapsule : UserControl
 {
     private readonly IApplicationStateService _appState;
     private readonly IAssessmentPolicyService _policy;
 
-    private TextBlock _workspaceLabel = null!;
-    private TextBlock _courseLabel = null!;
+    private TextBlock _codeLabel = null!;
     private Border _assessmentBadge = null!;
 
     public ControlCapsule(IApplicationStateService appState, IAssessmentPolicyService policy)
@@ -26,8 +26,8 @@ public sealed class ControlCapsule : UserControl
         _appState = appState;
         _policy = policy;
 
-        MinWidth = 160;
-        Height = 28;
+        MinWidth = 220;
+        Height = 44;
         SnapsToDevicePixels = true;
         FocusVisualStyle = null;
 
@@ -40,88 +40,97 @@ public sealed class ControlCapsule : UserControl
 
     private void BuildVisualTree()
     {
+        var radius = TryFindResource("CornerRadius") is CornerRadius cr && cr.TopLeft > 0
+            ? new CornerRadius(22) : new CornerRadius(22);
+
         var border = new Border
         {
-            CornerRadius = new CornerRadius(14),
+            CornerRadius = radius,
             BorderThickness = new Thickness(1),
-            Padding = new Thickness(10, 4, 10, 4),
-            Background = new SolidColorBrush(Color.FromArgb(210, 22, 22, 26)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(100, 255, 255, 255))
-        };
-
-        var panel = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-
-        _workspaceLabel = new TextBlock
-        {
-            FontSize = 10.5,
-            Foreground = Brushes.White,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-
-        var separator = new TextBlock
-        {
-            Text = "  |  ",
-            FontSize = 10.5,
-            Opacity = 0.3,
-            Foreground = Brushes.White,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-
-        _courseLabel = new TextBlock
-        {
-            FontSize = 10.5,
-            Opacity = 0.7,
-            Foreground = Brushes.White,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-
-        _assessmentBadge = new Border
-        {
-            CornerRadius = new CornerRadius(3),
-            Background = new SolidColorBrush(Color.FromRgb(200, 60, 40)),
-            Padding = new Thickness(4, 1, 4, 1),
-            Margin = new Thickness(8, 0, 0, 0),
-            VerticalAlignment = VerticalAlignment.Center,
-            Visibility = Visibility.Collapsed,
-            Child = new TextBlock
+            Padding = new Thickness(12, 0, 12, 0),
+            Background = Brush("SurfaceBackground", Color.FromArgb(210, 22, 22, 26)),
+            BorderBrush = Brush("PanelBorder", Color.FromArgb(100, 255, 255, 255)),
+            Effect = new System.Windows.Media.Effects.DropShadowEffect
             {
-                Text = "NON-AI",
-                FontSize = 8,
-                Foreground = Brushes.White,
-                FontWeight = FontWeights.Bold
+                BlurRadius = 22, ShadowDepth = 8, Direction = 270, Color = Colors.Black, Opacity = 0.45
             }
         };
 
-        panel.Children.Add(_workspaceLabel);
-        panel.Children.Add(separator);
-        panel.Children.Add(_courseLabel);
+        var panel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+
+        panel.Children.Add(new TextBlock
+        {
+            Text = "≡", FontSize = 15, Margin = new Thickness(0, 0, 10, 0),
+            VerticalAlignment = VerticalAlignment.Center, Foreground = Brush("SecondaryText", Colors.Gray)
+        });
+        panel.Children.Add(Divider());
+        panel.Children.Add(GlyphButton("▣", "Question Finder", () => _ = _appState.SwitchWorkspaceAsync(WorkspaceId.QuestionFinder)));
+        panel.Children.Add(GlyphButton("◐", "Show / hide the HUD", () => _appState.SetHudVisible(!_appState.Current.HudVisible)));
+        panel.Children.Add(GlyphButton("⧉", "Note Taking", () => _ = _appState.SwitchWorkspaceAsync(WorkspaceId.NoteTaking)));
+        panel.Children.Add(Divider());
+
+        _codeLabel = new TextBlock
+        {
+            FontSize = 11, FontWeight = FontWeights.SemiBold, Margin = new Thickness(4, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center, Foreground = Brush("PrimaryText", Colors.White)
+        };
+        panel.Children.Add(_codeLabel);
+
+        _assessmentBadge = new Border
+        {
+            CornerRadius = new CornerRadius(6),
+            Background = new SolidColorBrush(Color.FromRgb(0xC8, 0x3C, 0x28)),
+            Padding = new Thickness(6, 1, 6, 1),
+            Margin = new Thickness(8, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            Visibility = Visibility.Collapsed,
+            Child = new TextBlock { Text = "NON-AI", FontSize = 8, Foreground = Brushes.White, FontWeight = FontWeights.Bold }
+        };
         panel.Children.Add(_assessmentBadge);
 
         border.Child = panel;
         Content = border;
     }
 
-    private void OnStateChanged(object? sender, ApplicationStateChangedEventArgs e)
+    private UIElement Divider() => new Border
     {
-        Dispatcher.BeginInvoke(() => Update(e.Current));
+        Width = 1, Height = 20, Margin = new Thickness(6, 0, 6, 0),
+        Background = Brush("PanelBorder", Color.FromArgb(90, 255, 255, 255)),
+        VerticalAlignment = VerticalAlignment.Center
+    };
+
+    private Button GlyphButton(string glyph, string tip, Action action)
+    {
+        var btn = new Button
+        {
+            Content = glyph,
+            Width = 26, Height = 26, FontSize = 14,
+            Margin = new Thickness(1, 0, 1, 0),
+            Padding = new Thickness(0),
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Foreground = Brush("Accent", Color.FromRgb(0, 180, 255)),
+            Cursor = Cursors.Hand,
+            ToolTip = tip
+        };
+        btn.Click += (_, _) => action();
+        return btn;
     }
+
+    private void OnStateChanged(object? sender, ApplicationStateChangedEventArgs e)
+        => Dispatcher.BeginInvoke(() => Update(e.Current));
 
     private void Update(ApplicationState state)
     {
-        _workspaceLabel.Text = state.CurrentWorkspace switch
+        _codeLabel.Text = state.CurrentWorkspace switch
         {
-            WorkspaceId.NoteTaking => "📝 Notes",
-            WorkspaceId.QuestionFinder => "🔍 Question Finder",
-            _ => state.CurrentWorkspace.ToString()
+            WorkspaceId.NoteTaking => "NOTES",
+            WorkspaceId.QuestionFinder => "FINDER",
+            _ => state.CurrentWorkspace.ToString().ToUpperInvariant()
         };
-
-        _courseLabel.Text = state.CurrentCourseId ?? "No course";
-        _assessmentBadge.Visibility = state.AssessmentModeActive
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+        _assessmentBadge.Visibility = state.AssessmentModeActive ? Visibility.Visible : Visibility.Collapsed;
     }
+
+    private Brush Brush(string token, Color fallback)
+        => TryFindResource(token) as Brush ?? new SolidColorBrush(fallback);
 }
