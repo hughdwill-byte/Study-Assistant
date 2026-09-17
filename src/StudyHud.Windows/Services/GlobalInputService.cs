@@ -41,6 +41,13 @@ public sealed class GlobalInputService : IGlobalInputService
     // Touched only inside the hook callback (single-threaded on the installing thread).
     private readonly Dictionary<int, bool> _keyDownState = new();
 
+    // Mouse side-buttons Study HUD has claimed, collected per source key and unioned. When a claimed
+    // button's message reaches the hook it is swallowed (return 1) so it never reaches the focused app.
+    // The union is published as an immutable snapshot for a lock-free read in the callback.
+    private readonly Dictionary<string, int[]> _suppressSources = new();
+    private readonly object _suppressLock = new();
+    private volatile HashSet<int> _suppressedButtons = new();
+
     // Channel: hook callback → input worker (bounded, fail-open)
     private readonly Channel<GlobalInputEventArgs> _inputChannel =
         Channel.CreateBounded<GlobalInputEventArgs>(
@@ -224,6 +231,11 @@ public sealed class GlobalInputService : IGlobalInputService
 
                 // Fail-open: never block the hook callback
                 _inputChannel.Writer.TryWrite(ev);
+
+                // If this side-button is claimed by Study HUD, swallow it (both down AND up) so the
+                // focused app never sees it — e.g. Chrome no longer navigates back on Mouse 4.
+                if (_suppressedButtons.Contains(ev.MouseButton))
+                    return new IntPtr(1);
             }
         }
 
@@ -303,6 +315,28 @@ public sealed class GlobalInputService : IGlobalInputService
         }
         // _keyDownState is left to self-heal on the next transition — it is only ever mutated on
         // the hook thread, so it must not be touched from here (WatchKey/UnwatchKey run elsewhere).
+    }
+
+    // ── Suppressed mouse buttons (so claimed side-buttons don't reach other apps) ─
+
+    public void SetSuppressedMouseButtons(string key, IReadOnlyCollection<int> buttons)
+    {
+        lock (_suppressLock)
+        {
+            if (buttons is { Count: > 0 })
+                _suppressSources[key] = buttons.Distinct().ToArray();
+            else
+                _suppressSources.Remove(key);
+
+            // Recompute the union and publish it as a fresh immutable snapshot.
+            var union = new HashSet<int>();
+            foreach (var set in _suppressSources.Values)
+                foreach (var b in set)
+                    union.Add(b);
+            _suppressedButtons = union;
+        }
+
+        _logger.LogDebug("Suppressed mouse buttons: [{Buttons}].", string.Join(",", _suppressedButtons));
     }
 
     // ── Input worker ────────────────────────────────────────────────────────

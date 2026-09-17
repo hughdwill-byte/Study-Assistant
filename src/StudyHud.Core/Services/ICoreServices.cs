@@ -24,6 +24,15 @@ public interface IGlobalInputService : IDisposable
     /// <summary>Stops reporting the given virtual key.</summary>
     void UnwatchKey(int virtualKey);
 
+    /// <summary>
+    /// Declares which mouse side-buttons (4 = back, 5 = forward) Study HUD has claimed, so the
+    /// low-level hook <em>swallows</em> them and they never reach the focused app (e.g. Chrome's
+    /// back/forward navigation). Buttons are collected per <paramref name="key"/> and unioned across
+    /// keys, so independent subsystems (macros, Hold-to-Interact) can each declare their own set
+    /// without clobbering the others. Pass an empty collection to clear this key's claim.
+    /// </summary>
+    void SetSuppressedMouseButtons(string key, IReadOnlyCollection<int> buttons);
+
     Task StartAsync(CancellationToken cancellationToken = default);
     Task StopAsync(CancellationToken cancellationToken = default);
 }

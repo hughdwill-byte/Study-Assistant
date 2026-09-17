@@ -66,6 +66,7 @@ public sealed class HoldToInteractService : IDisposable
         _input.InputReceived += OnInputReceived;
         RegisterConfiguredHotkeys();
         SyncKeyboardWatch();
+        SyncMouseSuppression();
 
         _logger.LogInformation("HoldToInteractService started. Trigger: {Trigger}.", _trigger);
     }
@@ -84,7 +85,17 @@ public sealed class HoldToInteractService : IDisposable
             _input.UnwatchKey(watched);
             _watchedTriggerKey = null;
         }
+
+        _input.SetSuppressedMouseButtons("hold-to-interact", Array.Empty<int>());
     }
+
+    /// <summary>
+    /// When the Hold-to-Interact trigger is a mouse side-button, claim it so the low-level hook
+    /// swallows it and it doesn't also drive the focused app (e.g. Chrome forward/back).
+    /// </summary>
+    private void SyncMouseSuppression()
+        => _input.SetSuppressedMouseButtons("hold-to-interact",
+            _trigger.Type == TriggerKind.MouseButton ? new[] { _trigger.MouseButton } : Array.Empty<int>());
 
     /// <summary>Watches the trigger key when it is a keyboard key; unwatches a stale one (spec §6).</summary>
     private void SyncKeyboardWatch()
@@ -106,7 +117,7 @@ public sealed class HoldToInteractService : IDisposable
     public void SetTrigger(HoldTriggerConfig trigger)
     {
         _trigger = trigger;
-        if (_started) SyncKeyboardWatch();
+        if (_started) { SyncKeyboardWatch(); SyncMouseSuppression(); }
         _logger.LogInformation("Hold-to-Interact trigger changed to {Trigger}.", trigger);
     }
 
@@ -135,6 +146,7 @@ public sealed class HoldToInteractService : IDisposable
             _input.UnregisterHotKey(HotkeyIdToggleEditMode);
             RegisterConfiguredHotkeys();
             SyncKeyboardWatch();
+            SyncMouseSuppression();
         }
 
         _logger.LogInformation("Hold-to-Interact settings applied. Trigger: {Trigger}.", _trigger);
