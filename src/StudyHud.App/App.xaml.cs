@@ -87,6 +87,15 @@ public partial class App : Application
                 await appState.SetCourseAsync(settings.CurrentCourseId!);
             await appState.SwitchWorkspaceAsync(settings.CurrentWorkspace);
 
+            // Restore whether the optional Cheat Sheet panel was shown, before overlays are built.
+            appState.SetCheatSheetVisible(settings.CheatSheetEnabled);
+            // Persist later show/hide toggles (from the control capsule) so the choice survives restart.
+            appState.StateChanged += (_, ev) =>
+            {
+                if (ev.Previous.CheatSheetVisible != ev.Current.CheatSheetVisible)
+                    _ = settingsStore.UpdateAsync(s => s with { CheatSheetEnabled = ev.Current.CheatSheetVisible });
+            };
+
             // Step 5: Start foreground tracking
             var foreground = _host.Services.GetRequiredService<IForegroundWindowService>();
             await foreground.StartAsync();
@@ -109,6 +118,7 @@ public partial class App : Application
             pomodoro.ShortBreakMinutes = settings.ShortBreakMinutes;
             pomodoro.LongBreakMinutes = settings.LongBreakMinutes;
             pomodoro.LongBreakEvery = settings.LongBreakEveryCycles;
+            pomodoro.SoundsEnabled = settings.FocusSoundsEnabled;
 
             var quickSearch = _host.Services.GetRequiredService<QuickSearchController>();
             quickSearch.Start();
@@ -190,6 +200,7 @@ public partial class App : Application
                     sp.GetRequiredService<IAssessmentPolicyService>(),
                     sp.GetRequiredService<ISettingsStore>(),
                     sp.GetRequiredService<PomodoroService>(),
+                    sp.GetRequiredService<INotionPageReader>(),
                     sp.GetRequiredService<ILogger<OverlayManager>>()));
 
                 // ── Capture ──────────────────────────────────────────────────
@@ -244,6 +255,9 @@ public partial class App : Application
                     Path.Combine(GetAppDataDir(), "creds"),
                     sp.GetRequiredService<ILogger<DpapiCredentialStore>>()));
                 services.AddSingleton<INoteSource, NotionConnector>();
+                // The same connector also reads single pages for the Cheat Sheet panel.
+                services.AddSingleton<INotionPageReader>(sp =>
+                    (NotionConnector)sp.GetRequiredService<INoteSource>());
 
                 // ── Theming ──────────────────────────────────────────────────
                 services.AddSingleton<IThemeService, ThemeService>();

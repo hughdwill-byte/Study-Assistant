@@ -21,6 +21,9 @@ public sealed class PomodoroService
     public int LongBreakMinutes { get; set; } = 15;
     public int LongBreakEvery { get; set; } = 4;
 
+    /// <summary>Play a chime when a phase starts and when a phase ends (spec: focus-timer audio cue).</summary>
+    public bool SoundsEnabled { get; set; } = true;
+
     public PomodoroPhase Phase { get; private set; } = PomodoroPhase.Idle;
     public TimeSpan Remaining { get; private set; }
     public TimeSpan PhaseLength { get; private set; }
@@ -93,6 +96,11 @@ public sealed class PomodoroService
         };
         PhaseLength = TimeSpan.FromMinutes(minutes);
         Remaining = PhaseLength;
+
+        // Audible cue for the phase we just entered — a rising chime for Work, a falling one for a
+        // break — so the user knows a phase started/ended without watching the timer.
+        if (SoundsEnabled) PomodoroSounds.PlayForPhase(phase);
+
         PhaseChanged?.Invoke(this, EventArgs.Empty);
         Tick?.Invoke(this, EventArgs.Empty);
     }

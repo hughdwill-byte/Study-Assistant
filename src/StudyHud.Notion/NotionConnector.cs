@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using StudyHud.Core.Models;
 using StudyHud.Core.Services;
 
 namespace StudyHud.Notion;
@@ -13,7 +14,7 @@ namespace StudyHud.Notion;
 /// Downloads images promptly before URLs expire.
 /// Assessment Mode blocks all sync operations via IAssessmentPolicyService.
 /// </summary>
-public sealed class NotionConnector : INoteSource
+public sealed class NotionConnector : INoteSource, INotionPageReader
 {
     private readonly ICredentialStore _credentials;
     private readonly IAssessmentPolicyService _policy;
@@ -410,6 +411,228 @@ public sealed class NotionConnector : INoteSource
             return null;
         }
     }
+
+    // ── Cheat Sheet: read one page for display (INotionPageReader) ────────────
+
+    public Task<IReadOnlyList<DiscoveredPage>> ListPagesAsync(CancellationToken ct = default)
+        => DiscoverPagesAsync(ct);
+
+    /// <summary>
+    /// Loads a single page and preserves its formatting (headings, lists, quotes, callouts, code,
+    /// inline styles) and images, so the Cheat Sheet panel can show just the notes. Read-only — nothing
+    /// is uploaded. Gated by the same policy as sync, so it is blocked in Assessment Mode.
+    /// </summary>
+    public async Task<CheatSheetDocument?> LoadPageAsync(string pageId, CancellationToken ct = default)
+    {
+        if (!_policy.IsOperationAllowed(PolicyOperation.NotionSync))
+        {
+            _logger.LogInformation("Cheat Sheet load blocked: {Reason}",
+                _policy.GetBlockReason(PolicyOperation.NotionSync));
+            return null;
+        }
+
+        var token = await _credentials.RetrieveAsync(CredentialKey, ct).ConfigureAwait(false);
+        if (string.IsNullOrEmpty(token)) return null;
+        ConfigureAuth(token);
+
+        string title = "Notion Page";
+        var meta = await GetAsync($"pages/{pageId}", ct).ConfigureAwait(false);
+        if (meta is not null) title = ExtractPageTitle(meta.Value);
+
+        var blocks = new List<CheatBlock>();
+        await RenderChildrenAsync(pageId, blocks, indent: 0, depth: 0, ct).ConfigureAwait(false);
+
+        _logger.LogInformation("Cheat Sheet loaded page “{Title}” ({Count} block(s)).", title, blocks.Count);
+        return new CheatSheetDocument { Title = title, Blocks = blocks };
+    }
+
+    /// <summary>Walks a page/block's children in order, converting each to a rendered <see cref="CheatBlock"/>.</summary>
+    private async Task RenderChildrenAsync(
+        string blockId, List<CheatBlock> outp, int indent, int depth, CancellationToken ct)
+    {
+        if (depth > MaxPageDepth) return;
+        var children = await FetchBlockChildrenAsync(blockId, ct).ConfigureAwait(false);
+
+        int number = 0;
+        foreach (var child in children)
+        {
+            ct.ThrowIfCancellationRequested();
+            var type = child.TryGetProperty("type", out var t) && t.ValueKind == JsonValueKind.String
+                ? t.GetString() : null;
+            if (type is null) continue;
+
+            // Numbered-list counter runs over consecutive siblings; any other block resets it.
+            if (type == "numbered_list_item") number++; else number = 0;
+
+            switch (type)
+            {
+                case "heading_1": AddText(outp, child, type, CheatBlockKind.Heading1, indent); break;
+                case "heading_2": AddText(outp, child, type, CheatBlockKind.Heading2, indent); break;
+                case "heading_3": AddText(outp, child, type, CheatBlockKind.Heading3, indent); break;
+                case "paragraph": AddText(outp, child, type, CheatBlockKind.Paragraph, indent); break;
+                case "bulleted_list_item": AddText(outp, child, type, CheatBlockKind.Bulleted, indent); break;
+                case "numbered_list_item": AddText(outp, child, type, CheatBlockKind.Numbered, indent, number: number); break;
+                case "toggle": AddText(outp, child, type, CheatBlockKind.Paragraph, indent); break;
+                case "quote": AddText(outp, child, type, CheatBlockKind.Quote, indent); break;
+                case "code": AddText(outp, child, type, CheatBlockKind.Code, indent); break;
+                case "to_do":
+                    AddText(outp, child, type, CheatBlockKind.ToDo, indent, isChecked: IsChecked(child));
+                    break;
+                case "callout":
+                    AddText(outp, child, type, CheatBlockKind.Callout, indent, emoji: CalloutEmoji(child));
+                    break;
+                case "divider":
+                    outp.Add(new CheatBlock { Kind = CheatBlockKind.Divider, IndentLevel = indent });
+                    break;
+                case "image":
+                    var url = ImageUrlOfBlock(child);
+                    if (!string.IsNullOrEmpty(url))
+                    {
+                        var bytes = await TryDownloadAsync(url!, ct).ConfigureAwait(false);
+                        if (bytes is not null)
+                            outp.Add(new CheatBlock
+                            {
+                                Kind = CheatBlockKind.Image, IndentLevel = indent,
+                                ImageBytes = bytes, ImageCaption = CaptionOf(child, "image")
+                            });
+                    }
+                    break;
+                case "child_page":
+                    var childTitle = child.TryGetProperty("child_page", out var cp)
+                        && cp.TryGetProperty("title", out var ti) ? ti.GetString() : null;
+                    outp.Add(new CheatBlock
+                    {
+                        Kind = CheatBlockKind.ChildPageLink, IndentLevel = indent,
+                        Inlines = new[] { new CheatInline { Text = string.IsNullOrWhiteSpace(childTitle) ? "Untitled" : childTitle! } }
+                    });
+                    break;
+                default:
+                    // Unknown block that still carries rich text (e.g. a new list variant) — render as text.
+                    AddText(outp, child, type, CheatBlockKind.Paragraph, indent);
+                    break;
+            }
+
+            // Recurse into containers (toggles, nested lists, callouts, columns) — but never into a
+            // child_page (it is a separate page, shown here only as a link).
+            bool hasChildren = child.TryGetProperty("has_children", out var hc)
+                               && hc.ValueKind == JsonValueKind.True;
+            if (hasChildren && type != "child_page")
+            {
+                var id = child.TryGetProperty("id", out var idEl) ? idEl.GetString() : null;
+                // Column containers lay out side-by-side; stacking them vertically shouldn't add indent.
+                int childIndent = type is "column_list" or "column" ? indent : indent + 1;
+                if (!string.IsNullOrEmpty(id))
+                    await RenderChildrenAsync(id!, outp, childIndent, depth + 1, ct).ConfigureAwait(false);
+            }
+        }
+    }
+
+    /// <summary>Adds a text-bearing block, skipping empties (except headings/callouts, which may anchor structure).</summary>
+    private static void AddText(
+        List<CheatBlock> outp, JsonElement block, string type, CheatBlockKind kind, int indent,
+        int? number = null, bool isChecked = false, string? emoji = null)
+    {
+        var inlines = RichInlinesOf(block, type);
+        if (inlines.Count == 0
+            && kind is not (CheatBlockKind.Heading1 or CheatBlockKind.Heading2 or CheatBlockKind.Heading3 or CheatBlockKind.Callout))
+            return;
+
+        outp.Add(new CheatBlock
+        {
+            Kind = kind, IndentLevel = indent, Inlines = inlines,
+            Number = number, Checked = isChecked, Emoji = emoji
+        });
+    }
+
+    /// <summary>Parses a block's <c>rich_text</c> array into styled <see cref="CheatInline"/> runs.</summary>
+    private static List<CheatInline> RichInlinesOf(JsonElement block, string type)
+    {
+        var inlines = new List<CheatInline>();
+        if (!block.TryGetProperty(type, out var body) || body.ValueKind != JsonValueKind.Object)
+            return inlines;
+        if (!body.TryGetProperty("rich_text", out var rt) || rt.ValueKind != JsonValueKind.Array)
+            return inlines;
+
+        foreach (var span in rt.EnumerateArray())
+        {
+            var text = span.TryGetProperty("plain_text", out var pt) && pt.ValueKind == JsonValueKind.String
+                ? pt.GetString() ?? "" : "";
+            if (text.Length == 0) continue;
+
+            bool bold = false, italic = false, underline = false, strike = false, code = false;
+            string? color = null;
+            if (span.TryGetProperty("annotations", out var an) && an.ValueKind == JsonValueKind.Object)
+            {
+                bold = IsTrue(an, "bold");
+                italic = IsTrue(an, "italic");
+                underline = IsTrue(an, "underline");
+                strike = IsTrue(an, "strikethrough");
+                code = IsTrue(an, "code");
+                if (an.TryGetProperty("color", out var col) && col.ValueKind == JsonValueKind.String)
+                    color = MapColor(col.GetString());
+            }
+
+            inlines.Add(new CheatInline
+            {
+                Text = text, Bold = bold, Italic = italic, Underline = underline,
+                Strikethrough = strike, Code = code, ColorHex = color
+            });
+        }
+        return inlines;
+    }
+
+    private static bool IsTrue(JsonElement obj, string name)
+        => obj.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.True;
+
+    private static bool IsChecked(JsonElement block)
+        => block.TryGetProperty("to_do", out var td) && IsTrue(td, "checked");
+
+    private static string? CalloutEmoji(JsonElement block)
+        => block.TryGetProperty("callout", out var co)
+           && co.TryGetProperty("icon", out var icon)
+           && icon.TryGetProperty("type", out var it) && it.GetString() == "emoji"
+           && icon.TryGetProperty("emoji", out var em) ? em.GetString() : null;
+
+    private static string? ImageUrlOfBlock(JsonElement block)
+    {
+        if (!block.TryGetProperty("image", out var img) || img.ValueKind != JsonValueKind.Object)
+            return null;
+        var kind = img.TryGetProperty("type", out var t) ? t.GetString() : null;
+        if (kind == "external" && img.TryGetProperty("external", out var ext)
+            && ext.TryGetProperty("url", out var u1) && u1.ValueKind == JsonValueKind.String)
+            return u1.GetString();
+        if (kind == "file" && img.TryGetProperty("file", out var file)
+            && file.TryGetProperty("url", out var u2) && u2.ValueKind == JsonValueKind.String)
+            return u2.GetString();
+        return null;
+    }
+
+    private static string? CaptionOf(JsonElement block, string type)
+    {
+        if (!block.TryGetProperty(type, out var body) || !body.TryGetProperty("caption", out var cap)
+            || cap.ValueKind != JsonValueKind.Array)
+            return null;
+        var sb = new StringBuilder();
+        foreach (var s in cap.EnumerateArray())
+            if (s.TryGetProperty("plain_text", out var pt)) sb.Append(pt.GetString());
+        var text = sb.ToString().Trim();
+        return text.Length == 0 ? null : text;
+    }
+
+    /// <summary>Maps Notion's named text colours to hex; background variants and "default" return null.</summary>
+    private static string? MapColor(string? c) => c switch
+    {
+        "gray" => "#9AA4B2",
+        "brown" => "#B0785A",
+        "orange" => "#E8912D",
+        "yellow" => "#E6C34A",
+        "green" => "#4FBF84",
+        "blue" => "#4FA8E8",
+        "purple" => "#9B7BE0",
+        "pink" => "#E86FA6",
+        "red" => "#E8615A",
+        _ => null // "default" and every "*_background" fall back to the theme's text colour
+    };
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
