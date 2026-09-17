@@ -1,4 +1,8 @@
-# Study HUD
+<p align="center">
+  <img src="assets/branding/StudyHud-icon.png" alt="Study HUD logo" width="160">
+</p>
+
+<h1 align="center">Study HUD</h1>
 
 A Windows desktop study assistant: an always‑on‑top, click‑through HUD overlay with configurable
 macros, one‑gesture screenshot capture, multi‑monitor layouts, and a **deterministic Question
