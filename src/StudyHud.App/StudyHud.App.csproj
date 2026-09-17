@@ -10,10 +10,18 @@
     <Platforms>x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Embeds the icon in StudyHud.exe so Explorer + the taskbar show it like any normal app. -->
+    <ApplicationIcon>app.ico</ApplicationIcon>
     <AssemblyName>StudyHud</AssemblyName>
     <RootNamespace>StudyHud.App</RootNamespace>
     <!-- Per-Monitor V2 DPI awareness is declared in the manifest -->
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Same icon as a resource for the window title bar, plus the splash-screen logo. -->
+    <Resource Include="app.ico" />
+    <Resource Include="Assets\studyhud-icon.png" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\StudyHud.Core\StudyHud.Core.csproj" />
     <ProjectReference Include="..\StudyHud.Windows\StudyHud.Windows.csproj" />

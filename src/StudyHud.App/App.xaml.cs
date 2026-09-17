@@ -31,6 +31,12 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        // Step 0: Show the branded launch screen immediately, before any slow init. Because the
+        // startup below is fully async, the UI thread keeps rendering the splash while we load.
+        var splashStarted = DateTime.UtcNow;
+        var splash = new SplashWindow();
+        splash.Show();
+
         // Step 1: Configure Serilog before anything else (spec §70)
         var logPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -119,9 +125,16 @@ public partial class App : Application
             var coordinator = _host.Services.GetRequiredService<WorkspaceCoordinator>();
             coordinator.Start();
 
-            // Step 8: Show settings window (first run: onboarding)
+            // Step 8: Hold the launch screen for a minimum of ~2s, then dismiss it and show
+            // the settings window (first run: onboarding).
+            var shown = (DateTime.UtcNow - splashStarted).TotalMilliseconds;
+            if (shown < 2000)
+                await Task.Delay(TimeSpan.FromMilliseconds(2000 - shown));
+            splash.FadeOutAndClose();
+
             var mainWindow = _host.Services.GetRequiredService<MainWindow>();
             mainWindow.Show();
+            mainWindow.Activate();
 
             Log.Information("Study HUD started successfully. HUD is active and in Ghost mode.");
 
@@ -130,6 +143,7 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
+            try { splash.Close(); } catch { /* ignore */ }
             Log.Fatal(ex, "Study HUD failed to start.");
             MessageBox.Show(
                 $"Study HUD failed to start:\n\n{ex.Message}\n\nSee logs for details.",
