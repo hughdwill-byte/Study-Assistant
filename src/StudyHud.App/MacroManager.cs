@@ -119,7 +119,19 @@ public sealed class MacroManager
             hotkeyId++;
         }
 
+        // Claim the mouse side-buttons used by enabled mouse macros so the low-level hook swallows
+        // them — otherwise the button also reaches the focused app (e.g. Chrome navigates back on
+        // Mouse 4 while the macro snips). Keyboard macros use RegisterHotKey and need no suppression.
+        var claimedButtons = specs
+            .Where(s => s.Enabled && !s.IsKeyboard)
+            .Select(s => s.TriggerKind switch { "mouse4" => 4, "mouse5" => 5, _ => 0 })
+            .Where(b => b != 0)
+            .Distinct()
+            .ToArray();
+        _input.SetSuppressedMouseButtons("macros", claimedButtons);
+
         _logger.LogInformation(
-            "Applied {Count} macro(s); {Hotkeys} global hotkey(s).", specs.Count, _registeredHotkeyIds.Count);
+            "Applied {Count} macro(s); {Hotkeys} global hotkey(s); suppressing mouse buttons [{Buttons}].",
+            specs.Count, _registeredHotkeyIds.Count, string.Join(",", claimedButtons));
     }
 }

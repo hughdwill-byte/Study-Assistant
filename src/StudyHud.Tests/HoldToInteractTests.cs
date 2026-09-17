@@ -16,10 +16,13 @@ public sealed class HoldToInteractTests
     private sealed class FakeInputService : IGlobalInputService
     {
         public readonly HashSet<int> WatchedKeys = new();
+        public readonly Dictionary<string, int[]> Suppressed = new();
         public event EventHandler<GlobalInputEventArgs>? InputReceived;
 
         public void WatchKey(int virtualKey) => WatchedKeys.Add(virtualKey);
         public void UnwatchKey(int virtualKey) => WatchedKeys.Remove(virtualKey);
+        public void SetSuppressedMouseButtons(string key, IReadOnlyCollection<int> buttons)
+            => Suppressed[key] = buttons.ToArray();
         public void RegisterHotKey(int id, ModifierKeys modifiers, int virtualKey) { }
         public void UnregisterHotKey(int id) { }
         public Task StartAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
@@ -120,5 +123,28 @@ public sealed class HoldToInteractTests
             EventType = GlobalInputEventType.MouseButton, IsMouseButton = true, MouseButton = 5, IsDown = true
         });
         state.Current.HudInteractionState.Should().Be(HudInteractionState.Active);
+    }
+
+    [Fact]
+    public void MouseTrigger_IsSuppressed_SoItDoesNotReachOtherApps()
+    {
+        var (svc, input, _) = Build();
+        svc.Start(); // keyboard default — nothing to suppress yet
+        input.Suppressed.GetValueOrDefault("hold-to-interact", Array.Empty<int>())
+            .Should().BeEmpty();
+
+        svc.ApplySettings(new StudyHudSettings
+        {
+            HoldToInteract = new HoldTriggerSettings { Type = HoldTriggerType.MouseButton, MouseButton = 4 }
+        });
+
+        input.Suppressed["hold-to-interact"].Should().Equal(4);
+
+        // Switching back to a keyboard trigger releases the mouse-button claim.
+        svc.ApplySettings(new StudyHudSettings
+        {
+            HoldToInteract = new HoldTriggerSettings { Type = HoldTriggerType.KeyboardKey, VirtualKey = 0x14 }
+        });
+        input.Suppressed["hold-to-interact"].Should().BeEmpty();
     }
 }
