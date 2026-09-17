@@ -23,10 +23,13 @@ public sealed class PanelHost : Canvas
     private readonly IQuestionFinder _finder;
     private readonly IAssessmentPolicyService _policy;
     private readonly PomodoroService _pomodoro;
+    private readonly INotionPageReader _notionReader;
+    private readonly ISettingsStore _settings;
 
     private readonly List<HudPanelBase> _panels = [];
     private ControlCapsule? _capsule;
     private FocusTimerPanel? _focusPanel;
+    private CheatSheetPanel? _cheatPanel;
 
     /// <summary>The monitor this host renders panels for.</summary>
     public string MonitorId => _monitor.MonitorId;
@@ -38,7 +41,9 @@ public sealed class PanelHost : Canvas
         ICaptureService capture,
         IQuestionFinder finder,
         IAssessmentPolicyService policy,
-        PomodoroService pomodoro)
+        PomodoroService pomodoro,
+        INotionPageReader notionReader,
+        ISettingsStore settings)
     {
         _monitor = monitor;
         _appState = appState;
@@ -47,6 +52,8 @@ public sealed class PanelHost : Canvas
         _finder = finder;
         _policy = policy;
         _pomodoro = pomodoro;
+        _notionReader = notionReader;
+        _settings = settings;
 
         Background = Brushes.Transparent;
         SnapsToDevicePixels = true;
@@ -86,8 +93,26 @@ public sealed class PanelHost : Canvas
         _pomodoro.PhaseChanged += OnPomodoroPhaseChanged;
         UpdateFocusPanelPresence();
 
+        // Optional Cheat Sheet panel — workspace-independent; shown only when the user enables it
+        // (from the control capsule) so it can be pinned to a Notion page as a topic/test reference.
+        _cheatPanel = new CheatSheetPanel(_appState, _theme, _notionReader, _policy, _settings);
+        Canvas.SetRight(_cheatPanel, 16);
+        Canvas.SetTop(_cheatPanel, 16);
+        UpdateCheatPanelPresence();
+
         // Default panel layout based on current workspace
         SwitchWorkspacePanels(_appState.Current.CurrentWorkspace);
+    }
+
+    /// <summary>Adds the Cheat Sheet panel while it is enabled (or while calibrating), removes it otherwise.</summary>
+    private void UpdateCheatPanelPresence()
+    {
+        if (_cheatPanel == null) return;
+        bool active = _appState.Current.CheatSheetVisible
+                      || _appState.Current.HudInteractionState == HudInteractionState.Edit;
+        bool present = Children.Contains(_cheatPanel);
+        if (active && !present) Children.Add(_cheatPanel);
+        else if (!active && present) Children.Remove(_cheatPanel);
     }
 
     private void OnPomodoroPhaseChanged(object? sender, EventArgs e)
@@ -111,10 +136,17 @@ public sealed class PanelHost : Canvas
             if (e.Previous.CurrentWorkspace != e.Current.CurrentWorkspace)
                 SwitchWorkspacePanels(e.Current.CurrentWorkspace);
 
-            // Entering/leaving Calibrate (Edit) shows/hides the Focus panel so it can be positioned
-            // even when the timer isn't running.
+            // Entering/leaving Calibrate (Edit) shows/hides the Focus + Cheat Sheet panels so they can
+            // be positioned even when not otherwise shown.
             if (e.Previous.HudInteractionState != e.Current.HudInteractionState)
+            {
                 UpdateFocusPanelPresence();
+                UpdateCheatPanelPresence();
+            }
+
+            // The control capsule toggles the optional Cheat Sheet panel on/off.
+            if (e.Previous.CheatSheetVisible != e.Current.CheatSheetVisible)
+                UpdateCheatPanelPresence();
 
             // In Ghost mode the whole window is WS_EX_TRANSPARENT — no hit testing needed here.
             // In Active/Edit mode the window is interactive.

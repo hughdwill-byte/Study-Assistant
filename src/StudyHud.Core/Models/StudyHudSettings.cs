@@ -95,6 +95,19 @@ public record StudyHudSettings
     public int LongBreakMinutes { get; init; } = 15;
     public int LongBreakEveryCycles { get; init; } = 4;
 
+    /// <summary>Play a chime when the Focus timer starts a phase and when a phase ends.</summary>
+    public bool FocusSoundsEnabled { get; init; } = true;
+
+    // ── Cheat Sheet (optional Notion-page HUD panel) ─────────────────────────
+    /// <summary>Whether the optional Cheat Sheet panel is shown on the HUD.</summary>
+    public bool CheatSheetEnabled { get; init; } = false;
+
+    /// <summary>The Notion page id currently pinned to the Cheat Sheet panel, or null if none chosen.</summary>
+    public string? CheatSheetPageId { get; init; }
+
+    /// <summary>The title of the pinned Cheat Sheet page, shown in the picker before it loads.</summary>
+    public string? CheatSheetPageTitle { get; init; }
+
     // ── Session context (spec §22, §43) ──────────────────────────────────────
     public WorkspaceId CurrentWorkspace { get; init; } = WorkspaceId.NoteTaking;
     public string? CurrentCourseId { get; init; }

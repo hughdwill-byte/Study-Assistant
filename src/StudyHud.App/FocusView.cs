@@ -205,6 +205,19 @@ public sealed class FocusView : UserControl
         apply.Click += (_, _) => SaveLengths();
         root.Children.Add(apply);
 
+        // ── Sound (audible start/end cue) ────────────────────────────────────
+        root.Children.Add(Header("SOUND"));
+        var sound = new CheckBox
+        {
+            Content = "Play a chime when a focus block starts and ends",
+            IsChecked = _pomodoro.SoundsEnabled,
+            Foreground = Brush("PrimaryText", Colors.White),
+            Cursor = System.Windows.Input.Cursors.Hand
+        };
+        sound.Checked += (_, _) => SetSounds(true);
+        sound.Unchecked += (_, _) => SetSounds(false);
+        root.Children.Add(sound);
+
         // ── Quick-Search hotkey (artboard 1f) ────────────────────────────────
         root.Children.Add(Header("QUICK-SEARCH"));
         root.Children.Add(new TextBlock
@@ -252,6 +265,12 @@ public sealed class FocusView : UserControl
             LongBreakMinutes = _pomodoro.LongBreakMinutes,
             LongBreakEveryCycles = _pomodoro.LongBreakEvery
         });
+    }
+
+    private void SetSounds(bool on)
+    {
+        _pomodoro.SoundsEnabled = on;
+        _ = _settings.UpdateAsync(s => s with { FocusSoundsEnabled = on });
     }
 
     private void OnPomodoro(object? sender, EventArgs e) => UpdateUi();

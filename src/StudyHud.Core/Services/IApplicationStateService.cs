@@ -39,6 +39,9 @@ public interface IApplicationStateService
     /// <summary>Sets global HUD visibility (Panic Hide — spec §7).</summary>
     void SetHudVisible(bool visible);
 
+    /// <summary>Shows or hides the optional Cheat Sheet panel.</summary>
+    void SetCheatSheetVisible(bool visible);
+
     /// <summary>Enters/exits capture mode (spec §139).</summary>
     void SetCaptureModeActive(bool active);
 }

@@ -80,6 +80,10 @@ public record ApplicationState
     public string? CurrentMacroProfileId { get; init; }
     public HudInteractionState HudInteractionState { get; init; } = HudInteractionState.Ghost;
     public bool HudVisible { get; init; } = true;
+
+    /// <summary>Whether the optional Cheat Sheet panel is shown on the HUD (spec: optional note panel).</summary>
+    public bool CheatSheetVisible { get; init; } = false;
+
     public bool AssessmentModeActive { get; init; } = false;
     public bool IsCaptureModeActive { get; init; } = false;
     public string? ForegroundExcludedAppName { get; init; }

@@ -110,4 +110,10 @@ public sealed class ApplicationStateService : IApplicationStateService
     {
         Update(s => s with { IsCaptureModeActive = active });
     }
+
+    public void SetCheatSheetVisible(bool visible)
+    {
+        Update(s => s with { CheatSheetVisible = visible });
+        _logger.LogDebug("Cheat Sheet visibility set to {Visible}.", visible);
+    }
 }
