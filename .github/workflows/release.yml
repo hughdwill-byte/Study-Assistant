@@ -62,6 +62,9 @@ jobs:
           # top-level "StudyHud" folder; the user extracts it and runs StudyHud.exe inside.
           Remove-Item publish/StudyHud/*.pdb -ErrorAction SilentlyContinue
           Copy-Item README.md publish/StudyHud/ -ErrorAction SilentlyContinue
+          # Ship the app logo (PDF vector + PNG) inside the download.
+          New-Item -ItemType Directory -Force -Path publish/StudyHud/branding | Out-Null
+          Copy-Item assets/branding/* publish/StudyHud/branding/ -ErrorAction SilentlyContinue
           Compress-Archive -Path publish/StudyHud -DestinationPath '${{ steps.ver.outputs.asset }}' -Force
           Get-ChildItem publish/StudyHud | Format-Table Name, Length
 
@@ -91,4 +94,7 @@ jobs:
 
             See the [README](https://github.com/hughdwill-byte/Study-Assistant/blob/main/README.md)
             for setup (Notion token, courses, Assessment Mode). This is a pre-release: expect rough edges.
-          files: ${{ steps.ver.outputs.asset }}
+          files: |
+            ${{ steps.ver.outputs.asset }}
+            assets/branding/StudyHud-logo.pdf
+            assets/branding/StudyHud-icon.pdf
