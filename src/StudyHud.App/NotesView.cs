@@ -99,7 +99,8 @@ public sealed class NotesView : UserControl
             }
 
             var files = new DirectoryInfo(NotesDir)
-                .GetFiles("*.png")
+                .EnumerateFiles("note-*.*")
+                .Where(f => f.Extension is ".png" or ".jpg" or ".jpeg")
                 .OrderByDescending(f => f.LastWriteTime)
                 .ToList();
 

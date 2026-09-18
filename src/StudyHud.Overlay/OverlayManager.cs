@@ -21,6 +21,8 @@ public sealed class OverlayManager : IDisposable
     private readonly ISettingsStore _settings;
     private readonly PomodoroService _pomodoro;
     private readonly INotionPageReader _notionReader;
+    private readonly MomentumService _momentum;
+    private readonly IForegroundWindowService _foreground;
     private readonly ILogger<OverlayManager> _logger;
     private readonly Dictionary<string, MonitorOverlayWindow> _overlays = new();
     private string? _activeMonitorId;
@@ -36,6 +38,8 @@ public sealed class OverlayManager : IDisposable
         ISettingsStore settings,
         PomodoroService pomodoro,
         INotionPageReader notionReader,
+        MomentumService momentum,
+        IForegroundWindowService foreground,
         ILogger<OverlayManager> logger)
     {
         _monitors = monitors;
@@ -47,6 +51,8 @@ public sealed class OverlayManager : IDisposable
         _settings = settings;
         _pomodoro = pomodoro;
         _notionReader = notionReader;
+        _momentum = momentum;
+        _foreground = foreground;
         _logger = logger;
 
         _monitors.TopologyChanged += OnTopologyChanged;
@@ -123,7 +129,7 @@ public sealed class OverlayManager : IDisposable
 
         // Create a PanelHost and attach it to the overlay
         var host = new PanelHost(monitor, _appState, _theme, _capture, _finder, _policy, _pomodoro,
-            _notionReader, _settings);
+            _notionReader, _settings, _momentum, _foreground);
         overlay.SetPanelHost(host);
 
         _overlays[monitor.MonitorId] = overlay;

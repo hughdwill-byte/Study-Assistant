@@ -25,11 +25,14 @@ public sealed class PanelHost : Canvas
     private readonly PomodoroService _pomodoro;
     private readonly INotionPageReader _notionReader;
     private readonly ISettingsStore _settings;
+    private readonly MomentumService _momentum;
+    private readonly IForegroundWindowService _foreground;
 
     private readonly List<HudPanelBase> _panels = [];
     private ControlCapsule? _capsule;
     private FocusTimerPanel? _focusPanel;
     private CheatSheetPanel? _cheatPanel;
+    private readonly List<HudPanelBase> _adhdPanels = [];
 
     /// <summary>The monitor this host renders panels for.</summary>
     public string MonitorId => _monitor.MonitorId;
@@ -43,7 +46,9 @@ public sealed class PanelHost : Canvas
         IAssessmentPolicyService policy,
         PomodoroService pomodoro,
         INotionPageReader notionReader,
-        ISettingsStore settings)
+        ISettingsStore settings,
+        MomentumService momentum,
+        IForegroundWindowService foreground)
     {
         _monitor = monitor;
         _appState = appState;
@@ -54,6 +59,8 @@ public sealed class PanelHost : Canvas
         _pomodoro = pomodoro;
         _notionReader = notionReader;
         _settings = settings;
+        _momentum = momentum;
+        _foreground = foreground;
 
         Background = Brushes.Transparent;
         SnapsToDevicePixels = true;
@@ -100,8 +107,37 @@ public sealed class PanelHost : Canvas
         Canvas.SetTop(_cheatPanel, 16);
         UpdateCheatPanelPresence();
 
+        // ── ADHD support layer ────────────────────────────────────────────────
+        // Feed completed focus blocks into momentum, and apply the hyperfocus session cap.
+        _pomodoro.SessionCapMinutes = _settings.Current.SessionCapMinutes;
+        _pomodoro.FocusBlockCompleted += (_, minutes) => _momentum.RecordFocusBlockCompleted(minutes);
+
+        var clock = new ClockBadgePanel(_appState, _theme, _pomodoro, _momentum);
+        Canvas.SetLeft(clock, 320); Canvas.SetTop(clock, 16);
+        var start = new StartPanel(_appState, _theme, _pomodoro, _settings);
+        Canvas.SetLeft(start, 16); Canvas.SetTop(start, 330);
+        var companion = new FocusCompanionPanel(_appState, _theme, _pomodoro, _momentum, _foreground, _settings);
+        Canvas.SetRight(companion, 16); Canvas.SetTop(companion, 210);
+        _adhdPanels.Add(clock);
+        _adhdPanels.Add(start);
+        _adhdPanels.Add(companion);
+        UpdateAdhdPanelsPresence();
+
         // Default panel layout based on current workspace
         SwitchWorkspacePanels(_appState.Current.CurrentWorkspace);
+    }
+
+    /// <summary>Shows the ADHD focus panels while ADHD Mode is on (or while calibrating), hides them otherwise.</summary>
+    private void UpdateAdhdPanelsPresence()
+    {
+        bool active = _appState.Current.AdhdMode
+                      || _appState.Current.HudInteractionState == HudInteractionState.Edit;
+        foreach (var p in _adhdPanels)
+        {
+            bool present = Children.Contains(p);
+            if (active && !present) Children.Add(p);
+            else if (!active && present) Children.Remove(p);
+        }
     }
 
     /// <summary>Adds the Cheat Sheet panel while it is enabled (or while calibrating), removes it otherwise.</summary>
@@ -142,11 +178,16 @@ public sealed class PanelHost : Canvas
             {
                 UpdateFocusPanelPresence();
                 UpdateCheatPanelPresence();
+                UpdateAdhdPanelsPresence();
             }
 
             // The control capsule toggles the optional Cheat Sheet panel on/off.
             if (e.Previous.CheatSheetVisible != e.Current.CheatSheetVisible)
                 UpdateCheatPanelPresence();
+
+            // The control capsule toggles the ADHD support layer on/off.
+            if (e.Previous.AdhdMode != e.Current.AdhdMode)
+                UpdateAdhdPanelsPresence();
 
             // In Ghost mode the whole window is WS_EX_TRANSPARENT — no hit testing needed here.
             // In Active/Edit mode the window is interactive.

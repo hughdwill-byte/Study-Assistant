@@ -84,6 +84,9 @@ public record ApplicationState
     /// <summary>Whether the optional Cheat Sheet panel is shown on the HUD (spec: optional note panel).</summary>
     public bool CheatSheetVisible { get; init; } = false;
 
+    /// <summary>Whether the ADHD support layer is active (extra focus panels + calmer, softer behaviour).</summary>
+    public bool AdhdMode { get; init; } = false;
+
     public bool AssessmentModeActive { get; init; } = false;
     public bool IsCaptureModeActive { get; init; } = false;
     public string? ForegroundExcludedAppName { get; init; }

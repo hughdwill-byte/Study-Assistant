@@ -108,6 +108,45 @@ public record StudyHudSettings
     /// <summary>The title of the pinned Cheat Sheet page, shown in the picker before it loads.</summary>
     public string? CheatSheetPageTitle { get; init; }
 
+    /// <summary>Remembered vertical scroll offset per Cheat Sheet page id, so reopening lands where you left off.</summary>
+    public Dictionary<string, double> CheatSheetScroll { get; init; } = new();
+
+    // ── ADHD support layer ───────────────────────────────────────────────────
+    /// <summary>Master switch for the ADHD support layer (extra focus panels, calmer defaults, softer copy).</summary>
+    public bool AdhdMode { get; init; } = false;
+
+    /// <summary>The user's current "next smallest step" shown on the Start panel (task-initiation aid).</summary>
+    public string? StartNextStep { get; init; }
+
+    /// <summary>Minutes for the quick "5-minute start" button on the Start panel.</summary>
+    public int QuickStartMinutes { get; init; } = 5;
+
+    /// <summary>Play an escalating, harder-to-miss prompt when a focus block ends (for hyperfocus).</summary>
+    public bool EscalatingBreakPrompts { get; init; } = true;
+
+    /// <summary>Show the decision-free wind-down card when a focus block ends.</summary>
+    public bool WindDownCard { get; init; } = true;
+
+    /// <summary>Nudge after this many minutes of continuous focus (hyperfocus safety). 0 = off.</summary>
+    public int SessionCapMinutes { get; init; } = 90;
+
+    /// <summary>Focus Shield: count distractions and show a "focus on" cue while a session runs.</summary>
+    public bool FocusShieldEnabled { get; init; } = true;
+
+    // ── Momentum / reward (persisted streak + daily totals) ──────────────────
+    public int StreakCount { get; init; } = 0;
+    public int BestStreak { get; init; } = 0;
+
+    /// <summary>The last date (yyyy-MM-dd) a focus block was completed, for streak continuity.</summary>
+    public string? LastStudyDate { get; init; }
+
+    /// <summary>Focus minutes completed on <see cref="FocusMinutesTodayDate"/> (reset when the date rolls over).</summary>
+    public int FocusMinutesToday { get; init; } = 0;
+    public string? FocusMinutesTodayDate { get; init; }
+
+    /// <summary>Total focus blocks ever completed (lifetime momentum).</summary>
+    public int TotalFocusBlocks { get; init; } = 0;
+
     // ── Session context (spec §22, §43) ──────────────────────────────────────
     public WorkspaceId CurrentWorkspace { get; init; } = WorkspaceId.NoteTaking;
     public string? CurrentCourseId { get; init; }

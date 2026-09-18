@@ -86,8 +86,9 @@ public sealed class CaptureService : ICaptureService, IDisposable
             return null;
         }
 
-        // 3) Crop the selected region out of the clean snapshot.
-        var imageBytes = CropToPng(snapshot, physLeft, physTop, rect);
+        // 3) Crop the selected region out of the clean snapshot, encoded to stay under Notion's 5 MB
+        //    paste limit (so the same bytes go on the clipboard and paste straight in).
+        var (imageBytes, ext) = CropAndEncode(snapshot, physLeft, physTop, rect);
         if (imageBytes.Length == 0)
         {
             _logger.LogWarning("Captured region produced no image bytes.");
@@ -98,11 +99,13 @@ public sealed class CaptureService : ICaptureService, IDisposable
             new ScreenPoint(rect.Left + rect.Width / 2, rect.Top + rect.Height / 2));
 
         await CopyToClipboardAsync(imageBytes);
-        _logger.LogInformation("Screenshot captured: {W}×{H}px.", rect.Width, rect.Height);
+        _logger.LogInformation("Screenshot captured: {W}×{H}px, {KB} KB ({Ext}).",
+            rect.Width, rect.Height, imageBytes.Length / 1024, ext);
 
         return new CaptureResult
         {
             ImageBytes = imageBytes,
+            ImageExtension = ext,
             PhysicalRect = rect,
             MonitorId = monitor?.MonitorId ?? string.Empty,
             WasCancelled = false
@@ -162,7 +165,13 @@ public sealed class CaptureService : ICaptureService, IDisposable
         }
     }
 
-    private byte[] CropToPng(System.Drawing.Bitmap snapshot, int physLeft, int physTop, ScreenRect rect)
+    // Notion's free plan rejects pasted images over 5 MB; stay safely under it, and cap resolution so
+    // a large multi-monitor / high-DPI grab doesn't blow the limit (while staying legible for OCR).
+    private const long MaxImageBytes = 4_700_000;
+    private const int MaxDimension = 3000;
+
+    private (byte[] Bytes, string Ext) CropAndEncode(
+        System.Drawing.Bitmap snapshot, int physLeft, int physTop, ScreenRect rect)
     {
         try
         {
@@ -179,15 +188,75 @@ public sealed class CaptureService : ICaptureService, IDisposable
 
             using var cropped = snapshot.Clone(
                 new System.Drawing.Rectangle(offX, offY, w, h), snapshot.PixelFormat);
-            using var ms = new MemoryStream();
-            cropped.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
-            return ms.ToArray();
+            return EncodeUnderLimit(cropped);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Cropping the captured region failed.");
-            return Array.Empty<byte>();
+            return (Array.Empty<byte>(), "png");
         }
+    }
+
+    /// <summary>
+    /// Encodes the image so it fits under <see cref="MaxImageBytes"/>: prefer lossless PNG (best for
+    /// screen text / OCR); if it's too big, downscale and/or fall back to progressively lower-quality
+    /// JPEG until it fits. Guaranteed to return a small image even for huge captures.
+    /// </summary>
+    private (byte[] Bytes, string Ext) EncodeUnderLimit(System.Drawing.Bitmap source)
+    {
+        double scale = 1.0;
+        int maxDim = Math.Max(source.Width, source.Height);
+        if (maxDim > MaxDimension) scale = (double)MaxDimension / maxDim;
+
+        for (int attempt = 0; attempt < 6 && scale >= 0.12; attempt++, scale *= 0.8)
+        {
+            using var resized = scale < 0.999 ? Resize(source, scale) : null;
+            var img = resized ?? source;
+
+            var png = ToBytes(img, System.Drawing.Imaging.ImageFormat.Png);
+            if (png.LongLength <= MaxImageBytes) return (png, "png");
+
+            foreach (long quality in new long[] { 90, 82, 74, 66, 58 })
+            {
+                var jpg = ToJpeg(img, quality);
+                if (jpg.LongLength <= MaxImageBytes) return (jpg, "jpg");
+            }
+        }
+
+        // Last resort — a hard cap that always fits.
+        using var tiny = Resize(source, Math.Min(1.0, 1600.0 / Math.Max(source.Width, source.Height)));
+        return (ToJpeg(tiny, 55), "jpg");
+    }
+
+    private static System.Drawing.Bitmap Resize(System.Drawing.Bitmap src, double scale)
+    {
+        int w = Math.Max(1, (int)Math.Round(src.Width * scale));
+        int h = Math.Max(1, (int)Math.Round(src.Height * scale));
+        var dst = new System.Drawing.Bitmap(w, h);
+        using var g = System.Drawing.Graphics.FromImage(dst);
+        g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+        g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+        g.DrawImage(src, 0, 0, w, h);
+        return dst;
+    }
+
+    private static byte[] ToBytes(System.Drawing.Bitmap img, System.Drawing.Imaging.ImageFormat format)
+    {
+        using var ms = new MemoryStream();
+        img.Save(ms, format);
+        return ms.ToArray();
+    }
+
+    private static byte[] ToJpeg(System.Drawing.Bitmap img, long quality)
+    {
+        var codec = System.Drawing.Imaging.ImageCodecInfo.GetImageEncoders()
+            .First(c => c.FormatID == System.Drawing.Imaging.ImageFormat.Jpeg.Guid);
+        using var ps = new System.Drawing.Imaging.EncoderParameters(1);
+        ps.Param[0] = new System.Drawing.Imaging.EncoderParameter(
+            System.Drawing.Imaging.Encoder.Quality, quality);
+        using var ms = new MemoryStream();
+        img.Save(ms, codec, ps);
+        return ms.ToArray();
     }
 
     private async Task CopyToClipboardAsync(byte[] pngBytes)

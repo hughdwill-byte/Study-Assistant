@@ -224,6 +224,10 @@ public record CaptureResult
     public required ScreenRect PhysicalRect { get; init; }
     public required string MonitorId { get; init; }
     public bool WasCancelled { get; init; }
+
+    /// <summary>File extension matching <see cref="ImageBytes"/> ("png" or "jpg"). The capture keeps
+    /// images under Notion's 5 MB paste limit, falling back from PNG to JPEG only when needed.</summary>
+    public string ImageExtension { get; init; } = "png";
 }
 
 // ─── CREDENTIAL STORE ───────────────────────────────────────────────────────

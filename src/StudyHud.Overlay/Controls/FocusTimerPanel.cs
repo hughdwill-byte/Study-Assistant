@@ -18,6 +18,8 @@ public sealed class FocusTimerPanel : HudPanelBase
 
     private TextBlock _phase = null!;
     private TextBlock _time = null!;
+    private TextBlock _elapsed = null!;
+    private TextBox _goal = null!;
     private ProgressBar _progress = null!;
     private StackPanel _dots = null!;
     private Button _startPause = null!;
@@ -47,6 +49,20 @@ public sealed class FocusTimerPanel : HudPanelBase
         };
         stack.Children.Add(_phase);
 
+        // ADHD: one clear outcome for this sprint ("answer 5 questions", not "study ch.4").
+        _goal = new TextBox
+        {
+            MinHeight = 26, Margin = new Thickness(0, 6, 0, 2),
+            VerticalContentAlignment = VerticalAlignment.Center,
+            ToolTip = "One clear outcome for this sprint"
+        };
+        stack.Children.Add(new TextBlock
+        {
+            Text = "This sprint's goal", FontSize = 9, Opacity = 0.6,
+            Foreground = Brush("SecondaryText", Colors.Gray), HorizontalAlignment = HorizontalAlignment.Center
+        });
+        stack.Children.Add(_goal);
+
         _time = new TextBlock
         {
             Text = "25:00", FontSize = 44, FontWeight = FontWeights.Medium,
@@ -54,6 +70,13 @@ public sealed class FocusTimerPanel : HudPanelBase
             FontFamily = Mono(), Margin = new Thickness(0, 2, 0, 8), Effect = glow ? Glow(accent, 0.5, 16) : null
         };
         stack.Children.Add(_time);
+
+        _elapsed = new TextBlock
+        {
+            Text = "", FontSize = 10, Opacity = 0.7, HorizontalAlignment = HorizontalAlignment.Center,
+            Foreground = Brush("SecondaryText", Colors.Gray), Margin = new Thickness(0, 0, 0, 8)
+        };
+        stack.Children.Add(_elapsed);
 
         _progress = new ProgressBar
         {
@@ -117,6 +140,11 @@ public sealed class FocusTimerPanel : HudPanelBase
         _progress.Value = _pomodoro.PhaseLength.TotalSeconds > 0
             ? 100.0 * (1.0 - _pomodoro.Remaining.TotalSeconds / _pomodoro.PhaseLength.TotalSeconds)
             : 0;
+
+        // ADHD: make elapsed time visible ("you've been focused N min") so lost time surfaces.
+        _elapsed.Text = _pomodoro.Phase == PomodoroPhase.Work
+            ? $"focused {(int)_pomodoro.Elapsed.TotalMinutes}m {_pomodoro.Elapsed.Seconds:00}s"
+            : "";
 
         _startPause.Content = _pomodoro.IsRunning
             ? "Pause"

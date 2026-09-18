@@ -28,7 +28,7 @@ public sealed class ThemeService : IThemeService
     }
 
     public IReadOnlyList<string> AvailableThemeIds =>
-        ["Default", "Dark", "Light", "Retro", "Beer", "Space", "LiquidGlass"];
+        ["Default", "Dark", "Light", "Retro", "Beer", "Space", "LiquidGlass", "Calm"];
     public string CurrentThemeId => _currentThemeId;
 
     public object? GetResource(string tokenKey) =>
@@ -57,6 +57,9 @@ public sealed class ThemeService : IThemeService
                 break;
             case "LiquidGlass":
                 ApplyTokenSet(ThemeTokens.LiquidGlass);
+                break;
+            case "Calm":
+                ApplyTokenSet(ThemeTokens.Calm);
                 break;
             default: // "Default" — neutral polished dark
                 ApplyTokenSet(ThemeTokens.Default);
@@ -266,6 +269,28 @@ internal static class ThemeTokens
         PanelBackground = B(15, 15, 18, 235),
         SurfaceBackground = B(20, 20, 24, 245),
         Accent = B(99, 102, 241)
+    };
+
+    /// <summary>
+    /// "Calm" — the low-distraction default for ADHD Mode: soft desaturated slate, a single gentle
+    /// teal accent, generous rounding, no glow/animation flags. Chosen to reduce visual load and
+    /// novelty so the study material stays the main event. Presentation only.
+    /// </summary>
+    public static ThemeTokenSet Calm => Default with
+    {
+        PanelBackground = B(30, 34, 40, 235),
+        PanelBorder = B(70, 78, 88, 180),
+        SurfaceBackground = B(26, 30, 36, 242),
+        SecondaryBackground = B(38, 43, 50, 220),
+        Accent = B(90, 178, 168),          // muted teal, easy on the eyes
+        PrimaryText = B(226, 230, 234),
+        SecondaryText = B(150, 158, 168),
+        Warning = B(214, 170, 90),
+        Error = B(206, 110, 104),
+        Success = B(122, 180, 130),
+        RevealTab = B(90, 178, 168, 190),
+        CornerRadius = 12,
+        PanelPadding = 12
     };
 
     /// <summary>

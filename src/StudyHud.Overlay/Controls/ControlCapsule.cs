@@ -67,6 +67,7 @@ public sealed class ControlCapsule : UserControl
         panel.Children.Add(GlyphButton("▣", "Question Finder", () => _ = _appState.SwitchWorkspaceAsync(WorkspaceId.QuestionFinder)));
         panel.Children.Add(GlyphButton("◐", "Show / hide the HUD", () => _appState.SetHudVisible(!_appState.Current.HudVisible)));
         panel.Children.Add(GlyphButton("▤", "Show / hide the Cheat Sheet", () => _appState.SetCheatSheetVisible(!_appState.Current.CheatSheetVisible)));
+        panel.Children.Add(GlyphButton("◎", "ADHD focus mode", () => _appState.SetAdhdMode(!_appState.Current.AdhdMode)));
         panel.Children.Add(GlyphButton("⧉", "Note Taking", () => _ = _appState.SwitchWorkspaceAsync(WorkspaceId.NoteTaking)));
         panel.Children.Add(Divider());
 

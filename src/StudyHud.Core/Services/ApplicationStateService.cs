@@ -116,4 +116,10 @@ public sealed class ApplicationStateService : IApplicationStateService
         Update(s => s with { CheatSheetVisible = visible });
         _logger.LogDebug("Cheat Sheet visibility set to {Visible}.", visible);
     }
+
+    public void SetAdhdMode(bool enabled)
+    {
+        Update(s => s with { AdhdMode = enabled });
+        _logger.LogDebug("ADHD mode set to {Enabled}.", enabled);
+    }
 }
