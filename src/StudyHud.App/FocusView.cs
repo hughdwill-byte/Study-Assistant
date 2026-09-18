@@ -218,6 +218,49 @@ public sealed class FocusView : UserControl
         sound.Unchecked += (_, _) => SetSounds(false);
         root.Children.Add(sound);
 
+        // ── ADHD support layer ───────────────────────────────────────────────
+        root.Children.Add(Header("ADHD FOCUS MODE"));
+        root.Children.Add(new TextBlock
+        {
+            Text = "Adds a calm theme plus focus panels: a visible clock + streak, a one-tap Start panel, "
+                 + "and a supportive companion. Toggle it any time from the ◎ button on the control capsule.",
+            TextWrapping = TextWrapping.Wrap, Opacity = 0.75,
+            Foreground = Brush("SecondaryText", Colors.Gray), Margin = new Thickness(0, 0, 0, 6)
+        });
+
+        var adhd = AdhdCheck("Turn on ADHD focus mode", _appState.Current.AdhdMode);
+        adhd.Checked += (_, _) => _appState.SetAdhdMode(true);
+        adhd.Unchecked += (_, _) => _appState.SetAdhdMode(false);
+        root.Children.Add(adhd);
+
+        var shield = AdhdCheck("Focus shield — count distractions during a block", _settings.Current.FocusShieldEnabled);
+        shield.Checked += (_, _) => _ = _settings.UpdateAsync(s => s with { FocusShieldEnabled = true });
+        shield.Unchecked += (_, _) => _ = _settings.UpdateAsync(s => s with { FocusShieldEnabled = false });
+        root.Children.Add(shield);
+
+        var wind = AdhdCheck("Show the wind-down card when a block ends", _settings.Current.WindDownCard);
+        wind.Checked += (_, _) => _ = _settings.UpdateAsync(s => s with { WindDownCard = true });
+        wind.Unchecked += (_, _) => _ = _settings.UpdateAsync(s => s with { WindDownCard = false });
+        root.Children.Add(wind);
+
+        var capRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
+        capRow.Children.Add(new TextBlock
+        {
+            Text = "Break nudge after (min, 0 = off)", VerticalAlignment = VerticalAlignment.Center,
+            Foreground = Brush("PrimaryText", Colors.White), Margin = new Thickness(0, 0, 8, 0)
+        });
+        var capBox = NumBox();
+        capBox.Text = _settings.Current.SessionCapMinutes.ToString();
+        capBox.LostFocus += (_, _) =>
+        {
+            int cap = int.TryParse(capBox.Text, out var v) ? Math.Clamp(v, 0, 240) : 90;
+            capBox.Text = cap.ToString();
+            _pomodoro.SessionCapMinutes = cap;
+            _ = _settings.UpdateAsync(s => s with { SessionCapMinutes = cap });
+        };
+        capRow.Children.Add(capBox);
+        root.Children.Add(capRow);
+
         // ── Quick-Search hotkey (artboard 1f) ────────────────────────────────
         root.Children.Add(Header("QUICK-SEARCH"));
         root.Children.Add(new TextBlock
@@ -272,6 +315,15 @@ public sealed class FocusView : UserControl
         _pomodoro.SoundsEnabled = on;
         _ = _settings.UpdateAsync(s => s with { FocusSoundsEnabled = on });
     }
+
+    private CheckBox AdhdCheck(string label, bool isChecked) => new()
+    {
+        Content = label,
+        IsChecked = isChecked,
+        Foreground = Brush("PrimaryText", Colors.White),
+        Cursor = System.Windows.Input.Cursors.Hand,
+        Margin = new Thickness(0, 2, 0, 0)
+    };
 
     private void OnPomodoro(object? sender, EventArgs e) => UpdateUi();
 
@@ -360,7 +412,8 @@ public sealed class FocusView : UserControl
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StudyHud", "Notes");
             if (!Directory.Exists(dir)) return 0;
             var today = DateTime.Now.Date;
-            return new DirectoryInfo(dir).GetFiles("*.png").Count(f => f.LastWriteTime.Date == today);
+            return new DirectoryInfo(dir).EnumerateFiles("note-*.*")
+                .Count(f => f.Extension is ".png" or ".jpg" or ".jpeg" && f.LastWriteTime.Date == today);
         }
         catch { return 0; }
     }

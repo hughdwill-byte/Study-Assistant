@@ -111,7 +111,8 @@ public sealed class MacroEngine : IDisposable, IMacroProfileSwitcher
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "StudyHud", "Notes");
             Directory.CreateDirectory(dir);
-            var file = Path.Combine(dir, $"note-{DateTimeOffset.Now:yyyyMMdd-HHmmss-fff}.png");
+            var ext = string.IsNullOrWhiteSpace(result.ImageExtension) ? "png" : result.ImageExtension;
+            var file = Path.Combine(dir, $"note-{DateTimeOffset.Now:yyyyMMdd-HHmmss-fff}.{ext}");
             await File.WriteAllBytesAsync(file, bytes, ct).ConfigureAwait(false);
             _logger.LogInformation("Saved captured note to {File}.", file);
         }

@@ -30,6 +30,8 @@ public sealed class CheatSheetPanel : HudPanelBase
     private bool _pagesLoaded;
     private bool _initialised;
     private CancellationTokenSource? _loadCts;
+    private string? _currentPageId;
+    private double _lastScroll;
 
     public CheatSheetPanel(
         IApplicationStateService appState, IThemeService theme,
@@ -95,6 +97,8 @@ public sealed class CheatSheetPanel : HudPanelBase
             Content = _content,
             CanContentScroll = false
         };
+        // Remember where the user scrolled so reopening a page lands in the same place (working-memory aid).
+        _scroller.ScrollChanged += (_, _) => _lastScroll = _scroller.VerticalOffset;
         root.Children.Add(_scroller);
 
         contentGrid.Children.Add(root);
@@ -105,6 +109,20 @@ public sealed class CheatSheetPanel : HudPanelBase
             _initialised = true;
             _ = InitialLoadAsync();
         };
+        Unloaded += (_, _) => SaveScroll();
+    }
+
+    /// <summary>Persists the current scroll offset for the page in view.</summary>
+    private void SaveScroll()
+    {
+        if (string.IsNullOrEmpty(_currentPageId)) return;
+        var id = _currentPageId!;
+        var offset = _lastScroll;
+        _ = _settings.UpdateAsync(s =>
+        {
+            var map = new Dictionary<string, double>(s.CheatSheetScroll) { [id] = offset };
+            return s with { CheatSheetScroll = map };
+        });
     }
 
     // ── Loading ───────────────────────────────────────────────────────────────
@@ -183,9 +201,11 @@ public sealed class CheatSheetPanel : HudPanelBase
 
     private async Task LoadPageAsync(string pageId, string? knownTitle)
     {
+        SaveScroll();               // remember where we were on the outgoing page
         _loadCts?.Cancel();
         var cts = new CancellationTokenSource();
         _loadCts = cts;
+        _currentPageId = pageId;
 
         _content.Children.Clear();
         _scroller.ScrollToTop();
@@ -212,6 +232,11 @@ public sealed class CheatSheetPanel : HudPanelBase
 
             Render(doc);
             SetStatus(null);
+
+            // Restore the remembered scroll position once layout has settled.
+            if (_settings.Current.CheatSheetScroll.TryGetValue(pageId, out var saved) && saved > 0)
+                Dispatcher.BeginInvoke(new Action(() => _scroller.ScrollToVerticalOffset(saved)),
+                    System.Windows.Threading.DispatcherPriority.Loaded);
         }
         catch (OperationCanceledException) { /* superseded by a newer load */ }
         catch

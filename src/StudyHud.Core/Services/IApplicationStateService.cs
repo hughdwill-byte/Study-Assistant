@@ -42,6 +42,9 @@ public interface IApplicationStateService
     /// <summary>Shows or hides the optional Cheat Sheet panel.</summary>
     void SetCheatSheetVisible(bool visible);
 
+    /// <summary>Turns the ADHD support layer on or off.</summary>
+    void SetAdhdMode(bool enabled);
+
     /// <summary>Enters/exits capture mode (spec §139).</summary>
     void SetCaptureModeActive(bool active);
 }

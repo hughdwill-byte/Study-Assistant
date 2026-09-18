@@ -89,11 +89,15 @@ public partial class App : Application
 
             // Restore whether the optional Cheat Sheet panel was shown, before overlays are built.
             appState.SetCheatSheetVisible(settings.CheatSheetEnabled);
-            // Persist later show/hide toggles (from the control capsule) so the choice survives restart.
+            // Restore the ADHD support layer before overlays are built.
+            appState.SetAdhdMode(settings.AdhdMode);
+            // Persist later show/hide + ADHD toggles (from the control capsule) so choices survive restart.
             appState.StateChanged += (_, ev) =>
             {
                 if (ev.Previous.CheatSheetVisible != ev.Current.CheatSheetVisible)
                     _ = settingsStore.UpdateAsync(s => s with { CheatSheetEnabled = ev.Current.CheatSheetVisible });
+                if (ev.Previous.AdhdMode != ev.Current.AdhdMode)
+                    _ = settingsStore.UpdateAsync(s => s with { AdhdMode = ev.Current.AdhdMode });
             };
 
             // Step 5: Start foreground tracking
@@ -201,6 +205,8 @@ public partial class App : Application
                     sp.GetRequiredService<ISettingsStore>(),
                     sp.GetRequiredService<PomodoroService>(),
                     sp.GetRequiredService<INotionPageReader>(),
+                    sp.GetRequiredService<MomentumService>(),
+                    sp.GetRequiredService<IForegroundWindowService>(),
                     sp.GetRequiredService<ILogger<OverlayManager>>()));
 
                 // ── Capture ──────────────────────────────────────────────────
@@ -265,6 +271,9 @@ public partial class App : Application
                 // ── Focus Mode (Pomodoro + Quick-Search palette) ─────────────
                 services.AddSingleton<PomodoroService>();
                 services.AddSingleton<QuickSearchController>();
+
+                // ── ADHD support layer ───────────────────────────────────────
+                services.AddSingleton<MomentumService>();
 
                 // ── Windows ──────────────────────────────────────────────────
                 services.AddTransient<MainWindow>();

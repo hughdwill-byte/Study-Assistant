@@ -24,6 +24,22 @@ public sealed class PomodoroService
     /// <summary>Play a chime when a phase starts and when a phase ends (spec: focus-timer audio cue).</summary>
     public bool SoundsEnabled { get; set; } = true;
 
+    /// <summary>Nudge after this many minutes of continuous focus (ADHD hyperfocus safety). 0 = off.</summary>
+    public int SessionCapMinutes { get; set; } = 0;
+
+    /// <summary>Seconds elapsed in the current phase (for the ADHD "you've focused N min" badge).</summary>
+    public TimeSpan Elapsed => PhaseLength - Remaining;
+
+    private int _continuousFocusSeconds;
+    private bool _capAnnounced;
+    private int _currentWorkMinutes = 25; // length of the work block in progress (may differ from WorkMinutes)
+
+    /// <summary>Raised when a Work block completes — carries how many minutes it was (for momentum/reward).</summary>
+    public event EventHandler<int>? FocusBlockCompleted;
+
+    /// <summary>Raised once when continuous focus crosses <see cref="SessionCapMinutes"/> (hyperfocus safety).</summary>
+    public event EventHandler? SessionCapReached;
+
     public PomodoroPhase Phase { get; private set; } = PomodoroPhase.Idle;
     public TimeSpan Remaining { get; private set; }
     public TimeSpan PhaseLength { get; private set; }
@@ -56,6 +72,8 @@ public sealed class PomodoroService
         Remaining = TimeSpan.Zero;
         PhaseLength = TimeSpan.Zero;
         _workDoneInCycle = 0;
+        _continuousFocusSeconds = 0;
+        _capAnnounced = false;
         PhaseChanged?.Invoke(this, EventArgs.Empty);
         Tick?.Invoke(this, EventArgs.Empty);
     }
@@ -63,8 +81,38 @@ public sealed class PomodoroService
     /// <summary>Ends the current phase immediately and moves to the next.</summary>
     public void Skip() => CompletePhase();
 
+    /// <summary>
+    /// Starts an ad-hoc focus block of <paramref name="minutes"/> right now (the ADHD "5-minute start"),
+    /// without changing the configured work length. Completing it advances into a break as usual.
+    /// </summary>
+    public void StartQuick(int minutes)
+    {
+        minutes = Math.Max(1, minutes);
+        Phase = PomodoroPhase.Work;
+        _currentWorkMinutes = minutes;
+        PhaseLength = TimeSpan.FromMinutes(minutes);
+        Remaining = PhaseLength;
+        _continuousFocusSeconds = 0;
+        _capAnnounced = false;
+        if (SoundsEnabled) PomodoroSounds.PlayForPhase(PomodoroPhase.Work);
+        _timer.Start();
+        PhaseChanged?.Invoke(this, EventArgs.Empty);
+        Tick?.Invoke(this, EventArgs.Empty);
+    }
+
     private void OnSecond()
     {
+        // Track continuous focus for the hyperfocus session cap.
+        if (Phase == PomodoroPhase.Work)
+        {
+            _continuousFocusSeconds++;
+            if (!_capAnnounced && SessionCapMinutes > 0 && _continuousFocusSeconds >= SessionCapMinutes * 60)
+            {
+                _capAnnounced = true;
+                SessionCapReached?.Invoke(this, EventArgs.Empty);
+            }
+        }
+
         if (Remaining <= TimeSpan.FromSeconds(1)) { CompletePhase(); return; }
         Remaining -= TimeSpan.FromSeconds(1);
         Tick?.Invoke(this, EventArgs.Empty);
@@ -76,7 +124,11 @@ public sealed class PomodoroService
         {
             CompletedToday++;
             _workDoneInCycle++;
-            EnterPhase(_workDoneInCycle % LongBreakEvery == 0 ? PomodoroPhase.LongBreak : PomodoroPhase.ShortBreak);
+            FocusBlockCompleted?.Invoke(this, _currentWorkMinutes);
+            bool longBreak = _workDoneInCycle % LongBreakEvery == 0;
+            // A long break is a genuine rest — reset the continuous-focus counter for the cap.
+            if (longBreak) { _continuousFocusSeconds = 0; _capAnnounced = false; }
+            EnterPhase(longBreak ? PomodoroPhase.LongBreak : PomodoroPhase.ShortBreak);
         }
         else
         {
@@ -94,6 +146,7 @@ public sealed class PomodoroService
             PomodoroPhase.LongBreak => LongBreakMinutes,
             _ => 0
         };
+        if (phase == PomodoroPhase.Work) _currentWorkMinutes = minutes;
         PhaseLength = TimeSpan.FromMinutes(minutes);
         Remaining = PhaseLength;
 
