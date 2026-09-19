@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
+using StudyHud.Core.Models;
 using StudyHud.Core.Services;
 using StudyHud.Overlay;
 
@@ -260,6 +261,75 @@ public sealed class FocusView : UserControl
         };
         capRow.Children.Add(capBox);
         root.Children.Add(capRow);
+
+        // Support strength — how soon/firm the nudges are.
+        root.Children.Add(new TextBlock
+        {
+            Text = "Support strength", FontSize = 11, Opacity = 0.75,
+            Foreground = Brush("SecondaryText", Colors.Gray), Margin = new Thickness(0, 10, 0, 4)
+        });
+        var strengthRow = new WrapPanel();
+        void RebuildStrength()
+        {
+            strengthRow.Children.Clear();
+            foreach (var level in new[] { AdhdStrength.Gentle, AdhdStrength.Standard, AdhdStrength.Strong })
+            {
+                var btn = MakeButton(level.ToString(), accent: _settings.Current.AdhdStrength == level);
+                btn.Margin = new Thickness(0, 0, 8, 0);
+                var chosen = level;
+                btn.Click += (_, _) =>
+                {
+                    _ = _settings.UpdateAsync(s => s with { AdhdStrength = chosen });
+                    RebuildStrength();
+                };
+                strengthRow.Children.Add(btn);
+            }
+        }
+        RebuildStrength();
+        root.Children.Add(strengthRow);
+        root.Children.Add(new TextBlock
+        {
+            Text = "Gentle nudges late and softly; Strong nudges early with firmer (still kind) wording.",
+            FontSize = 10, Opacity = 0.6, TextWrapping = TextWrapping.Wrap,
+            Foreground = Brush("SecondaryText", Colors.Gray), Margin = new Thickness(0, 4, 0, 0)
+        });
+
+        // One-tap: set everything to the recommended ADHD configuration.
+        var preset = MakeButton("✨  Set up for ADHD", accent: true);
+        preset.HorizontalAlignment = HorizontalAlignment.Left;
+        preset.Margin = new Thickness(0, 12, 0, 0);
+        preset.ToolTip = "Turns on ADHD mode with the recommended strength, shorter sprints, break nudges "
+                       + "and the focus shield. Tip: pick the Calm theme on the Themes page too.";
+        preset.Click += (_, _) =>
+        {
+            var level = AdhdProfile.Recommended;
+            int cap = AdhdProfile.RecommendedSessionCap(level);
+            int focus = AdhdProfile.RecommendedFocusMinutes(level);
+
+            _appState.SetAdhdMode(true);
+            _pomodoro.SessionCapMinutes = cap;
+            _pomodoro.WorkMinutes = focus;
+            _ = _settings.UpdateAsync(s => s with
+            {
+                AdhdMode = true,
+                AdhdStrength = level,
+                FocusShieldEnabled = true,
+                WindDownCard = true,
+                EscalatingBreakPrompts = true,
+                SessionCapMinutes = cap,
+                FocusMinutes = focus
+            });
+
+            // Reflect the new values in the visible controls.
+            adhd.IsChecked = true;
+            shield.IsChecked = true;
+            wind.IsChecked = true;
+            capBox.Text = cap.ToString();
+            _focusBox.Text = focus.ToString();
+            RebuildStrength();
+            if (_pomodoro.Phase == PomodoroPhase.Idle) UpdateUi();
+        };
+        root.Children.Add(preset);
 
         // ── Quick-Search hotkey (artboard 1f) ────────────────────────────────
         root.Children.Add(Header("QUICK-SEARCH"));

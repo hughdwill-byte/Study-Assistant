@@ -115,6 +115,9 @@ public record StudyHudSettings
     /// <summary>Master switch for the ADHD support layer (extra focus panels, calmer defaults, softer copy).</summary>
     public bool AdhdMode { get; init; } = false;
 
+    /// <summary>How insistent the ADHD nudges are (how soon they fire, how firm the wording).</summary>
+    public AdhdStrength AdhdStrength { get; init; } = AdhdStrength.Standard;
+
     /// <summary>The user's current "next smallest step" shown on the Start panel (task-initiation aid).</summary>
     public string? StartNextStep { get; init; }
 
