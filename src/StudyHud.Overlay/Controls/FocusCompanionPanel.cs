@@ -25,8 +25,11 @@ public sealed class FocusCompanionPanel : HudPanelBase
 
     private int _distractions;
     private bool _capActive;
-    private bool _shieldEnabled = true;
-    private bool _windDownEnabled = true;
+
+    // Read live from settings so the strength selector / ADHD preset take effect without a restart.
+    private bool ShieldEnabled => _settings.Current.FocusShieldEnabled;
+    private bool WindDownEnabled => _settings.Current.WindDownCard;
+    private StudyHud.Core.Models.AdhdStrength Strength => _settings.Current.AdhdStrength;
 
     public FocusCompanionPanel(IApplicationStateService appState, IThemeService theme,
         PomodoroService pomodoro, MomentumService momentum,
@@ -77,16 +80,8 @@ public sealed class FocusCompanionPanel : HudPanelBase
 
         contentGrid.Children.Add(stack);
 
-        Loaded += async (_, _) =>
+        Loaded += (_, _) =>
         {
-            try
-            {
-                var s = await _settings.LoadAsync();
-                _shieldEnabled = s.FocusShieldEnabled;
-                _windDownEnabled = s.WindDownCard;
-            }
-            catch { /* defaults fine */ }
-
             _pomodoro.PhaseChanged += OnPhaseChanged;
             _pomodoro.FocusBlockCompleted += OnFocusBlockCompleted;
             _pomodoro.SessionCapReached += OnSessionCap;
@@ -115,6 +110,9 @@ public sealed class FocusCompanionPanel : HudPanelBase
     private void OnSessionCap(object? sender, EventArgs e) => Dispatcher.BeginInvoke(() =>
     {
         _capActive = true;
+        // At Strong strength the break nudge escalates to an audible cue so it isn't missed in hyperfocus.
+        if (StudyHud.Core.Models.AdhdProfile.Escalate(Strength) && _pomodoro.SoundsEnabled)
+            PomodoroSounds.PlayForPhase(PomodoroPhase.ShortBreak);
         RefreshUi();
     });
 
@@ -123,7 +121,7 @@ public sealed class FocusCompanionPanel : HudPanelBase
     private void OnForeground(object? sender, ForegroundContextChangedEventArgs e) => Dispatcher.BeginInvoke(() =>
     {
         // Count app switches away from Study HUD during a focus block — a gentle mirror, not surveillance.
-        if (!_shieldEnabled || _pomodoro.Phase != PomodoroPhase.Work) return;
+        if (!ShieldEnabled || _pomodoro.Phase != PomodoroPhase.Work) return;
         if (!e.Current.IsStudyHudOwned && e.Current.ExecutableName != e.Previous.ExecutableName)
         {
             _distractions++;
@@ -137,11 +135,15 @@ public sealed class FocusCompanionPanel : HudPanelBase
         _action.Visibility = Visibility.Collapsed;
         _sub.Visibility = Visibility.Collapsed;
 
-        // Hyperfocus cap takes priority — surface a gentle break nudge.
+        var strength = Strength;
+
+        // Hyperfocus cap takes priority — surface a break nudge (firmer at higher strength).
         if (_capActive && _pomodoro.Phase == PomodoroPhase.Work)
         {
             _mood.Text = "⏳";
-            _message.Text = $"You've been focused a while — a short break helps it stick.";
+            _message.Text = strength == StudyHud.Core.Models.AdhdStrength.Strong
+                ? "Time for a break — you've gone long enough, and it'll stick better."
+                : "You've been focused a while — a short break helps it stick.";
             _action.Content = "Take a break";
             _action.Background = accent;
             _action.Visibility = Visibility.Visible;
@@ -155,9 +157,12 @@ public sealed class FocusCompanionPanel : HudPanelBase
             case PomodoroPhase.Work:
                 _mood.Text = "🎯";
                 _message.Text = "Locked in — I'm right here with you.";
-                if (_shieldEnabled && _distractions > 0)
+                // Nudge once distractions cross the strength's threshold (Strong = after 1, Gentle = after 5).
+                if (ShieldEnabled && _distractions >= StudyHud.Core.Models.AdhdProfile.DistractionThreshold(strength))
                 {
-                    _sub.Text = $"Switched away {_distractions}× — come back when you're ready 💚";
+                    _sub.Text = strength == StudyHud.Core.Models.AdhdStrength.Strong
+                        ? $"You've drifted {_distractions}× — come back to it 💪"
+                        : $"Switched away {_distractions}× — come back when you're ready 💚";
                     _sub.Visibility = Visibility.Visible;
                 }
                 break;
@@ -168,7 +173,7 @@ public sealed class FocusCompanionPanel : HudPanelBase
                 _message.Text = _momentum.Streak > 0
                     ? $"Nice block! That's {_momentum.Streak} day{(_momentum.Streak == 1 ? "" : "s")} in a row."
                     : "Nice block — that counts.";
-                if (_windDownEnabled)
+                if (WindDownEnabled)
                 {
                     _sub.Text = "Wind down: stretch · water · note where you stopped.";
                     _sub.Visibility = Visibility.Visible;
