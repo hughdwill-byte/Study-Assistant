@@ -169,7 +169,7 @@ public sealed class HoldToInteractService : IDisposable
             if (e.HotKeyId == HotkeyIdToggleEditMode)
             {
                 if (state.HudInteractionState == HudInteractionState.Edit)
-                    _appState.SetHudInteractionState(HudInteractionState.Ghost);
+                    _appState.ExitEditMode();
                 else
                     _appState.SetHudInteractionState(HudInteractionState.Edit);
                 return;

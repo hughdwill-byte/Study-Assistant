@@ -8,19 +8,18 @@ namespace StudyHud.Overlay.Controls;
 
 /// <summary>
 /// Optional engineering-symbol palette. Click a symbol to type it straight into whatever app you're
-/// working in (the HUD is a no-activate window, so focus stays put). Favourite the ones you use so they
-/// pin to the top, search by symbol or name, and add your own if it isn't built in. Persisted in
-/// settings; deterministic and offline like the rest of the app.
+/// working in (the HUD is a no-activate window, so focus stays put and the character lands where you're
+/// typing). Favourites pin to the top; category chips filter the grid without typing (the HUD can't take
+/// keyboard focus). Searching by name and adding your own live on the Settings ▸ Symbols page.
 /// </summary>
 public sealed class SymbolPalettePanel : HudPanelBase
 {
     private readonly ITextInputService _input;
     private readonly ISettingsStore _settings;
 
-    private TextBox _search = null!;
-    private TextBox _newGlyph = null!;
-    private TextBox _newName = null!;
+    private WrapPanel _chipRow = null!;
     private StackPanel _list = null!;
+    private string _category = "All";
 
     public SymbolPalettePanel(IApplicationStateService appState, IThemeService theme,
         ITextInputService input, ISettingsStore settings)
@@ -31,7 +30,7 @@ public sealed class SymbolPalettePanel : HudPanelBase
         MinWidth = 260;
         MinHeight = 240;
         Width = 330;
-        Height = 440;
+        Height = 420;
     }
 
     protected override string PanelTitle => "Symbols";
@@ -40,44 +39,19 @@ public sealed class SymbolPalettePanel : HudPanelBase
     {
         var root = new DockPanel { Margin = new Thickness(10, 8, 10, 10), LastChildFill = true };
 
-        // ── Search ─────────────────────────────────────────────────────────────
-        _search = new TextBox
+        _chipRow = new WrapPanel { Margin = new Thickness(0, 0, 0, 6) };
+        DockPanel.SetDock(_chipRow, Dock.Top);
+        root.Children.Add(_chipRow);
+
+        var hint = new TextBlock
         {
-            Height = 28, VerticalContentAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 0, 8), ToolTip = "Search by symbol or name (e.g. ohm, theta, ±)"
+            Text = "Click to insert · right-click to favourite · search & add in Settings ▸ Symbols",
+            FontSize = 9, Opacity = 0.55, TextWrapping = TextWrapping.Wrap,
+            Foreground = Brush("SecondaryText", Colors.Gray), Margin = new Thickness(0, 0, 0, 6)
         };
-        _search.TextChanged += (_, _) => Rebuild();
-        DockPanel.SetDock(_search, Dock.Top);
-        root.Children.Add(_search);
+        DockPanel.SetDock(hint, Dock.Bottom);
+        root.Children.Add(hint);
 
-        // ── Add your own ─────────────────────────────────────────────────────────
-        var addRow = new DockPanel { LastChildFill = true, Margin = new Thickness(0, 0, 0, 8) };
-        var addBtn = SmallButton("＋");
-        addBtn.ToolTip = "Add this symbol to the palette";
-        addBtn.Click += (_, _) => AddCustom();
-        DockPanel.SetDock(addBtn, Dock.Right);
-        addRow.Children.Add(addBtn);
-
-        _newGlyph = new TextBox
-        {
-            Width = 46, Height = 26, Margin = new Thickness(0, 0, 6, 0),
-            HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center,
-            ToolTip = "Paste or type a symbol", MaxLength = 8
-        };
-        DockPanel.SetDock(_newGlyph, Dock.Left);
-        addRow.Children.Add(_newGlyph);
-
-        _newName = new TextBox
-        {
-            Height = 26, VerticalContentAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 6, 0), ToolTip = "Name (optional, for search)"
-        };
-        addRow.Children.Add(_newName);
-
-        DockPanel.SetDock(addRow, Dock.Top);
-        root.Children.Add(addRow);
-
-        // ── Scrollable list (favourites + all) ────────────────────────────────────
         _list = new StackPanel();
         root.Children.Add(new ScrollViewer
         {
@@ -91,48 +65,73 @@ public sealed class SymbolPalettePanel : HudPanelBase
         Loaded += (_, _) => Rebuild();
     }
 
-    // ── Building the grid ───────────────────────────────────────────────────────
-
     private IEnumerable<EngineeringSymbol> AllSymbols()
     {
         foreach (var s in EngineeringSymbols.BuiltIn) yield return s;
         foreach (var c in _settings.Current.CustomSymbols)
-            yield return new EngineeringSymbol { Glyph = c.Glyph, Name = c.Name, Keywords = c.Name, IsCustom = true };
+            yield return new EngineeringSymbol { Glyph = c.Glyph, Name = c.Name, Keywords = c.Name, Category = "Custom", IsCustom = true };
     }
 
     private void Rebuild()
     {
+        BuildChips();
+
         _list.Children.Clear();
-        var query = _search?.Text ?? "";
         var all = AllSymbols().ToList();
         var favGlyphs = _settings.Current.SymbolFavorites;
-        var byGlyph = new Dictionary<string, EngineeringSymbol>();
-        foreach (var s in all) byGlyph[s.Glyph] = s;
+        var favSet = new HashSet<string>(favGlyphs);
 
-        // Favourites (in saved order), filtered by the query.
-        var favs = favGlyphs
-            .Where(byGlyph.ContainsKey)
-            .Select(g => byGlyph[g])
-            .Where(s => s.Matches(query))
-            .ToList();
-        if (favs.Count > 0)
+        if (_category == "★ Favourites")
         {
-            _list.Children.Add(Header("★  Favourites"));
+            var favs = favGlyphs.Select(g => all.FirstOrDefault(s => s.Glyph == g)).Where(s => s is not null).Select(s => s!).ToList();
             _list.Children.Add(Wrap(favs));
+            if (favs.Count == 0)
+                _list.Children.Add(Note("No favourites yet — right-click a symbol to add one."));
+            return;
         }
 
-        // Everything else that matches.
-        var favSet = new HashSet<string>(favGlyphs);
-        var rest = all.Where(s => !favSet.Contains(s.Glyph) && s.Matches(query)).ToList();
-        _list.Children.Add(Header(favs.Count > 0 ? "All symbols" : "Symbols"));
-        if (rest.Count == 0 && favs.Count == 0)
-            _list.Children.Add(new TextBlock
+        // In "All", pin favourites at the top; a category view shows just that category.
+        if (_category == "All")
+        {
+            var favs = favGlyphs.Select(g => all.FirstOrDefault(s => s.Glyph == g)).Where(s => s is not null).Select(s => s!).ToList();
+            if (favs.Count > 0)
             {
-                Text = "No matches. Add it below with ＋.", Opacity = 0.7, Margin = new Thickness(2, 4, 0, 0),
-                Foreground = Brush("SecondaryText", Colors.Gray), TextWrapping = TextWrapping.Wrap
-            });
+                _list.Children.Add(Header("★  Favourites"));
+                _list.Children.Add(Wrap(favs));
+                _list.Children.Add(Header("All symbols"));
+            }
+            _list.Children.Add(Wrap(all.Where(s => !favSet.Contains(s.Glyph))));
+        }
         else
-            _list.Children.Add(Wrap(rest));
+        {
+            var inCat = all.Where(s => s.Category == _category).ToList();
+            _list.Children.Add(Wrap(inCat));
+            if (inCat.Count == 0)
+                _list.Children.Add(Note(_category == "Custom" ? "No custom symbols yet — add them in Settings ▸ Symbols." : "Nothing here."));
+        }
+    }
+
+    private void BuildChips()
+    {
+        _chipRow.Children.Clear();
+        var cats = new List<string> { "All", "★ Favourites" };
+        cats.AddRange(EngineeringSymbols.BuiltIn.Select(s => s.Category).Distinct());
+        if (_settings.Current.CustomSymbols.Count > 0) cats.Add("Custom");
+
+        foreach (var cat in cats)
+        {
+            var chip = new Button
+            {
+                Content = cat, FontSize = 10, Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 0, 4, 4),
+                Cursor = System.Windows.Input.Cursors.Hand, BorderThickness = new Thickness(cat == _category ? 0 : 1),
+                BorderBrush = Brush("PanelBorder", Color.FromRgb(70, 70, 80)),
+                Background = cat == _category ? Brush("Accent", Color.FromRgb(90, 178, 168)) : Brushes.Transparent,
+                Foreground = cat == _category ? Brushes.White : Brush("SecondaryText", Colors.Gray)
+            };
+            var chosen = cat;
+            chip.Click += (_, _) => { _category = chosen; Rebuild(); };
+            _chipRow.Children.Add(chip);
+        }
     }
 
     private WrapPanel Wrap(IEnumerable<EngineeringSymbol> symbols)
@@ -147,11 +146,7 @@ public sealed class SymbolPalettePanel : HudPanelBase
         var isFav = _settings.Current.SymbolFavorites.Contains(sym.Glyph);
         var btn = new Button
         {
-            Content = sym.Glyph,
-            FontSize = 18,
-            MinWidth = 40, Height = 40,
-            Margin = new Thickness(3),
-            Padding = new Thickness(0),
+            Content = sym.Glyph, FontSize = 18, MinWidth = 40, Height = 40, Margin = new Thickness(3), Padding = new Thickness(0),
             Cursor = System.Windows.Input.Cursors.Hand,
             Background = Brush("SecondaryBackground", Color.FromArgb(60, 255, 255, 255)),
             BorderBrush = isFav ? Brush("Accent", Color.FromRgb(90, 178, 168)) : Brush("PanelBorder", Color.FromRgb(70, 70, 80)),
@@ -165,17 +160,9 @@ public sealed class SymbolPalettePanel : HudPanelBase
         var fav = new MenuItem { Header = isFav ? "★ Unfavourite" : "☆ Favourite" };
         fav.Click += (_, _) => ToggleFavourite(sym.Glyph);
         menu.Items.Add(fav);
-        if (sym.IsCustom)
-        {
-            var remove = new MenuItem { Header = "Remove" };
-            remove.Click += (_, _) => RemoveCustom(sym.Glyph);
-            menu.Items.Add(remove);
-        }
         btn.ContextMenu = menu;
         return btn;
     }
-
-    // ── Persistence ─────────────────────────────────────────────────────────────
 
     private void ToggleFavourite(string glyph)
     {
@@ -187,58 +174,16 @@ public sealed class SymbolPalettePanel : HudPanelBase
         }).ContinueWith(_ => Dispatcher.BeginInvoke(Rebuild));
     }
 
-    private void RemoveCustom(string glyph)
-    {
-        _ = _settings.UpdateAsync(s =>
-        {
-            var customs = s.CustomSymbols.Where(c => c.Glyph != glyph).ToList();
-            var favs = s.SymbolFavorites.Where(g => g != glyph).ToList();
-            return s with { CustomSymbols = customs, SymbolFavorites = favs };
-        }).ContinueWith(_ => Dispatcher.BeginInvoke(Rebuild));
-    }
-
-    private void AddCustom()
-    {
-        var glyph = _newGlyph.Text?.Trim() ?? "";
-        var name = _newName.Text?.Trim() ?? "";
-        if (glyph.Length == 0) return;
-
-        // Ignore duplicates (built-in or already-added).
-        if (AllSymbols().Any(s => s.Glyph == glyph))
-        {
-            _newGlyph.Clear();
-            _newName.Clear();
-            return;
-        }
-
-        _ = _settings.UpdateAsync(s =>
-        {
-            var customs = new List<CustomSymbol>(s.CustomSymbols)
-            {
-                new() { Glyph = glyph, Name = string.IsNullOrEmpty(name) ? glyph : name }
-            };
-            return s with { CustomSymbols = customs };
-        }).ContinueWith(_ => Dispatcher.BeginInvoke(() =>
-        {
-            _newGlyph.Clear();
-            _newName.Clear();
-            Rebuild();
-        }));
-    }
-
-    // ── Helpers ─────────────────────────────────────────────────────────────────
-
     private TextBlock Header(string text) => new()
     {
         Text = text, FontSize = 10, Opacity = 0.6, Margin = new Thickness(2, 6, 0, 2),
         Foreground = Brush("SecondaryText", Colors.Gray)
     };
 
-    private Button SmallButton(string content) => new()
+    private TextBlock Note(string text) => new()
     {
-        Content = content, Width = 30, Height = 26, Padding = new Thickness(0),
-        Cursor = System.Windows.Input.Cursors.Hand, BorderThickness = new Thickness(0),
-        Background = Brush("Accent", Color.FromRgb(90, 178, 168)), Foreground = Brushes.White
+        Text = text, Opacity = 0.7, Margin = new Thickness(2, 4, 0, 0), TextWrapping = TextWrapping.Wrap,
+        Foreground = Brush("SecondaryText", Colors.Gray)
     };
 
     private Brush Brush(string token, Color fallback)
