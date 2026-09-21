@@ -163,6 +163,11 @@ public sealed class LocalSearchIndex : ISearchIndex
         // operators (AND, OR, NOT, NEAR) or contain punctuation can never corrupt the query.
         var terms = new List<string>();
 
+        // Exact key phrases first ("bending stress") — a quoted multi-word FTS5 phrase only matches
+        // notes containing those words adjacently, which is what makes the match precise (spec §54).
+        foreach (var phrase in query.Features.KeyPhrases.Take(8))
+            terms.Add(QuoteFts(phrase));
+
         foreach (var word in query.Features.Words.Take(12))
             if (word.Length >= 3) terms.Add(QuoteFts(word));
 
@@ -209,6 +214,26 @@ public sealed class LocalSearchIndex : ISearchIndex
             // Base BM25 (negated — lower = better in SQLite FTS5)
             double bm25Base = Math.Max(0, -r.Bm25Score * 10);
             score += bm25Base;
+
+            // Exact key-phrase bonus — a note that contains the whole phrase ("bending stress"), not
+            // merely the two words scattered, is the precise wording the user is after (spec §54).
+            // FTS snippet() wraps matched tokens in [ ], which would split a two-word phrase, so the
+            // markers are stripped before the adjacency check.
+            string cleanSnippet = r.Snippet is null ? string.Empty : r.Snippet.Replace("[", "").Replace("]", "");
+            foreach (var phrase in query.Features.KeyPhrases)
+            {
+                bool inSnippet = cleanSnippet.Contains(phrase, StringComparison.OrdinalIgnoreCase);
+                bool inHeading = r.HeadingText?.Contains(phrase, StringComparison.OrdinalIgnoreCase) == true;
+                if (inSnippet || inHeading)
+                {
+                    score += inHeading ? 30 : 22;
+                    explanations.Add(new MatchExplanation
+                    {
+                        Type = MatchType.PhraseBonuse,
+                        Value = phrase
+                    });
+                }
+            }
 
             // Heading match bonus
             if (!string.IsNullOrEmpty(r.HeadingText))
@@ -442,6 +467,50 @@ public sealed class LocalSearchIndex : ISearchIndex
             "SELECT COUNT(*) FROM note_items WHERE course_id = @c AND ocr_state = 'indexed'";
         cmd.Parameters.AddWithValue("@c", courseId);
         return (int)(long)(await cmd.ExecuteScalarAsync(ct) ?? 0L);
+    }
+
+    public async Task<IReadOnlyList<CorpusRow>> GetCourseCorpusAsync(
+        string courseId, CancellationToken ct = default)
+    {
+        var rows = new List<CorpusRow>();
+        try
+        {
+            using var conn = new SqliteConnection($"Data Source={_dbPath};Mode=ReadOnly");
+            await conn.OpenAsync(ct);
+
+            using var cmd = conn.CreateCommand();
+            // Only successfully indexed items (skip failed/low-confidence noise) so the Wordbank
+            // reflects clean, usable wording.
+            cmd.CommandText = """
+                SELECT id, course_id, week_label, page_name, heading_path, heading_text,
+                       notion_page_url, notion_block_id, ocr_normalised
+                FROM note_items
+                WHERE course_id = @c AND ocr_state = 'indexed'
+                """;
+            cmd.Parameters.AddWithValue("@c", courseId);
+
+            using var reader = await cmd.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                rows.Add(new CorpusRow
+                {
+                    NoteItemId = reader.GetString(0),
+                    CourseId = reader.GetString(1),
+                    WeekLabel = reader.IsDBNull(2) ? null : reader.GetString(2),
+                    PageName = reader.GetString(3),
+                    HeadingPath = reader.IsDBNull(4) ? "" : reader.GetString(4),
+                    HeadingText = reader.IsDBNull(5) ? null : reader.GetString(5),
+                    NotionPageUrl = reader.GetString(6),
+                    NotionBlockId = reader.IsDBNull(7) ? null : reader.GetString(7),
+                    Normalised = reader.IsDBNull(8) ? "" : reader.GetString(8)
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to read corpus for course {Course}.", courseId);
+        }
+        return rows;
     }
 
     private static void DeclareItemParameters(SqliteCommand cmd)

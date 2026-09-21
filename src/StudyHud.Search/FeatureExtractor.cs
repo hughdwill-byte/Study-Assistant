@@ -82,7 +82,10 @@ public static class FeatureExtractor
             Units = units,
             Expressions = expressions,
             Symbols = variables.Concat(ExtractUnicodeSymbols(normalisedText))
-                               .Distinct().ToList()
+                               .Distinct().ToList(),
+            // Adjacent significant word pairs ("bending stress") so search can match the exact wording
+            // of a concept, not just its separate words (spec §54).
+            KeyPhrases = KeyPhraseExtractor.Phrases(normalisedText)
         };
     }
 
