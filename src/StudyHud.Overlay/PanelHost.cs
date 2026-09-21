@@ -101,6 +101,7 @@ public sealed class PanelHost : Canvas
         _focusPanel = new FocusTimerPanel(_appState, _theme, _pomodoro);
         Canvas.SetLeft(_focusPanel, 16);
         Canvas.SetTop(_focusPanel, 16);
+        _focusPanel.CloseRequested += OnPanelCloseRequested;
         _pomodoro.PhaseChanged += OnPomodoroPhaseChanged;
         UpdateFocusPanelPresence();
 
@@ -109,12 +110,14 @@ public sealed class PanelHost : Canvas
         _cheatPanel = new CheatSheetPanel(_appState, _theme, _notionReader, _policy, _settings);
         Canvas.SetRight(_cheatPanel, 16);
         Canvas.SetTop(_cheatPanel, 16);
+        _cheatPanel.CloseRequested += OnPanelCloseRequested;
         UpdateCheatPanelPresence();
 
         // Optional engineering-symbol palette — click a symbol to type it into the focused app.
         _symbolPanel = new SymbolPalettePanel(_appState, _theme, _textInput, _settings);
         Canvas.SetRight(_symbolPanel, 360);
         Canvas.SetTop(_symbolPanel, 16);
+        _symbolPanel.CloseRequested += OnPanelCloseRequested;
         UpdateSymbolPanelPresence();
 
         // ── ADHD support layer ────────────────────────────────────────────────
@@ -131,17 +134,17 @@ public sealed class PanelHost : Canvas
         _adhdPanels.Add(clock);
         _adhdPanels.Add(start);
         _adhdPanels.Add(companion);
+        foreach (var p in _adhdPanels) p.CloseRequested += OnPanelCloseRequested;
         UpdateAdhdPanelsPresence();
 
         // Default panel layout based on current workspace
         SwitchWorkspacePanels(_appState.Current.CurrentWorkspace);
     }
 
-    /// <summary>Shows the ADHD focus panels while ADHD Mode is on (or while calibrating), hides them otherwise.</summary>
+    /// <summary>Shows the ADHD focus panels while ADHD Mode is on, hides them otherwise.</summary>
     private void UpdateAdhdPanelsPresence()
     {
-        bool active = _appState.Current.AdhdMode
-                      || _appState.Current.HudInteractionState == HudInteractionState.Edit;
+        bool active = _appState.Current.AdhdMode;
         foreach (var p in _adhdPanels)
         {
             bool present = Children.Contains(p);
@@ -150,23 +153,21 @@ public sealed class PanelHost : Canvas
         }
     }
 
-    /// <summary>Adds the Cheat Sheet panel while it is enabled (or while calibrating), removes it otherwise.</summary>
+    /// <summary>Adds the Cheat Sheet panel while it is enabled, removes it otherwise.</summary>
     private void UpdateCheatPanelPresence()
     {
         if (_cheatPanel == null) return;
-        bool active = _appState.Current.CheatSheetVisible
-                      || _appState.Current.HudInteractionState == HudInteractionState.Edit;
+        bool active = _appState.Current.CheatSheetVisible;
         bool present = Children.Contains(_cheatPanel);
         if (active && !present) Children.Add(_cheatPanel);
         else if (!active && present) Children.Remove(_cheatPanel);
     }
 
-    /// <summary>Adds the symbol palette while it is enabled (or while calibrating), removes it otherwise.</summary>
+    /// <summary>Adds the symbol palette while it is enabled, removes it otherwise.</summary>
     private void UpdateSymbolPanelPresence()
     {
         if (_symbolPanel == null) return;
-        bool active = _appState.Current.SymbolPaletteVisible
-                      || _appState.Current.HudInteractionState == HudInteractionState.Edit;
+        bool active = _appState.Current.SymbolPaletteVisible;
         bool present = Children.Contains(_symbolPanel);
         if (active && !present) Children.Add(_symbolPanel);
         else if (!active && present) Children.Remove(_symbolPanel);
@@ -179,11 +180,44 @@ public sealed class PanelHost : Canvas
     private void UpdateFocusPanelPresence()
     {
         if (_focusPanel == null) return;
-        bool active = _pomodoro.Phase != PomodoroPhase.Idle
-                      || _appState.Current.HudInteractionState == HudInteractionState.Edit;
+        bool active = _pomodoro.Phase != PomodoroPhase.Idle;
         bool present = Children.Contains(_focusPanel);
         if (active && !present) Children.Add(_focusPanel);
         else if (!active && present) Children.Remove(_focusPanel);
+    }
+
+    /// <summary>
+    /// A panel's ✕ was clicked. Turn off the toggle that owns the panel so it is removed cleanly (and
+    /// stays gone), rather than leaving an orphaned box on the canvas.
+    /// </summary>
+    private void OnPanelCloseRequested(object? sender, EventArgs e)
+    {
+        var panel = sender as HudPanelBase;
+        if (panel == null) return;
+
+        if (panel == _cheatPanel)
+        {
+            _appState.SetCheatSheetVisible(false);
+        }
+        else if (panel == _symbolPanel)
+        {
+            _appState.SetSymbolPaletteVisible(false);
+        }
+        else if (_adhdPanels.Contains(panel))
+        {
+            // The three ADHD panels are one group governed by ADHD Mode; closing one turns the layer off.
+            _appState.SetAdhdMode(false);
+        }
+        else if (panel == _focusPanel)
+        {
+            // Closing the floating timer ends the session so it idles away instead of popping back.
+            _pomodoro.Reset();
+            UpdateFocusPanelPresence();
+        }
+        else
+        {
+            Children.Remove(panel);
+        }
     }
 
     private void OnStateChanged(object? sender, ApplicationStateChangedEventArgs e)
@@ -193,15 +227,8 @@ public sealed class PanelHost : Canvas
             if (e.Previous.CurrentWorkspace != e.Current.CurrentWorkspace)
                 SwitchWorkspacePanels(e.Current.CurrentWorkspace);
 
-            // Entering/leaving Calibrate (Edit) shows/hides the Focus + Cheat Sheet panels so they can
-            // be positioned even when not otherwise shown.
-            if (e.Previous.HudInteractionState != e.Current.HudInteractionState)
-            {
-                UpdateFocusPanelPresence();
-                UpdateCheatPanelPresence();
-                UpdateAdhdPanelsPresence();
-                UpdateSymbolPanelPresence();
-            }
+            // Calibrate (Edit) no longer force-shows hidden panels — only the panels the user has
+            // actually enabled appear, so calibration can't leave a ghost box from an off panel.
 
             // The control capsule toggles the optional Cheat Sheet panel on/off.
             if (e.Previous.CheatSheetVisible != e.Current.CheatSheetVisible)

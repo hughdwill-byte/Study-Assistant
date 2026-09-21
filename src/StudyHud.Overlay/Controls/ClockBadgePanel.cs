@@ -29,7 +29,9 @@ public sealed class ClockBadgePanel : HudPanelBase
         _pomodoro = pomodoro;
         _momentum = momentum;
         MinWidth = 200;
+        MinHeight = 100;
         Width = 240;
+        Height = 130;
     }
 
     protected override string PanelTitle => "Time";

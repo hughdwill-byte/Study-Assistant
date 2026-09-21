@@ -34,6 +34,9 @@ public abstract class HudPanelBase : UserControl
     // Panel identity
     public string PanelId { get; }
 
+    /// <summary>Raised when the user clicks the panel's ✕. The host removes the panel and clears its toggle.</summary>
+    public event EventHandler? CloseRequested;
+
     protected HudPanelBase(string panelId, IApplicationStateService appState, IThemeService theme)
     {
         PanelId = panelId;
@@ -596,10 +599,33 @@ public abstract class HudPanelBase : UserControl
                 OuterBorder.Opacity = 1.0;
                 OuterBorder.Cursor = Cursors.SizeAll; // whole panel is draggable while calibrating
                 ResizeGrips.Visibility = Visibility.Visible;
+                // Bring a panel that got stuck oversized / off-screen back into reach for calibration.
+                Dispatcher.BeginInvoke(ClampIntoView, System.Windows.Threading.DispatcherPriority.Loaded);
                 break;
         }
 
         UpdateThemeResources();
+    }
+
+    /// <summary>Shrinks the panel to fit the visible canvas and nudges it fully on-screen.</summary>
+    private void ClampIntoView()
+    {
+        var canvas = Parent as Canvas ?? VisualTreeHelper.GetParent(this) as Canvas;
+        if (canvas == null || canvas.ActualWidth <= 0 || canvas.ActualHeight <= 0) return;
+
+        double w = ActualWidth > 0 ? ActualWidth : (Width > 0 && !double.IsNaN(Width) ? Width : MinWidth);
+        double h = ActualHeight > 0 ? ActualHeight : (Height > 0 && !double.IsNaN(Height) ? Height : MinHeight);
+
+        // Cap size to the visible area.
+        if (w > canvas.ActualWidth - 8) { Width = Math.Max(MinWidth, canvas.ActualWidth - 8); w = Width; }
+        if (h > canvas.ActualHeight - 8) { Height = Math.Max(MinHeight, canvas.ActualHeight - 8); h = Height; }
+
+        // Nudge fully on-screen (normalise off Right/Bottom pinning first).
+        var pos = NormaliseToLeftTop();
+        double left = Math.Clamp(pos.X, 0, Math.Max(0, canvas.ActualWidth - w));
+        double top = Math.Clamp(pos.Y, 0, Math.Max(0, canvas.ActualHeight - h));
+        Canvas.SetLeft(this, left);
+        Canvas.SetTop(this, top);
     }
 
     private void OnThemeChanged(object? sender, EventArgs e)
@@ -649,11 +675,14 @@ public abstract class HudPanelBase : UserControl
 
     // ── Drag (Edit Mode) ─────────────────────────────────────────────────────
 
-    /// <summary>Hides this panel. It reappears next launch (a hide, not a permanent removal).</summary>
+    /// <summary>Requests that the host close this panel (removes it and turns off its toggle).</summary>
     private void OnClosePanel(object sender, RoutedEventArgs e)
     {
-        Visibility = Visibility.Collapsed;
         e.Handled = true;
+        if (CloseRequested is not null)
+            CloseRequested.Invoke(this, EventArgs.Empty);
+        else
+            Visibility = Visibility.Collapsed; // fallback if nothing is listening
     }
 
     private void OnDragStart(object sender, MouseButtonEventArgs e)
@@ -711,10 +740,13 @@ public abstract class HudPanelBase : UserControl
         var parent = Parent as Canvas ?? VisualTreeHelper.GetParent(this) as Canvas;
         if (parent != null)
         {
-            double newLeft = Math.Max(0, _panelStartPos.X + delta.X);
-            double newTop = Math.Max(0, _panelStartPos.Y + delta.Y);
-            Canvas.SetLeft(this, newLeft);
-            Canvas.SetTop(this, newTop);
+            double newLeft = _panelStartPos.X + delta.X;
+            double newTop = _panelStartPos.Y + delta.Y;
+            // Keep the whole panel on-screen so its close/resize handles stay reachable.
+            double maxLeft = Math.Max(0, parent.ActualWidth - ActualWidth);
+            double maxTop = Math.Max(0, parent.ActualHeight - ActualHeight);
+            Canvas.SetLeft(this, Math.Clamp(newLeft, 0, maxLeft));
+            Canvas.SetTop(this, Math.Clamp(newTop, 0, maxTop));
         }
         e.Handled = true;
     }
@@ -750,6 +782,20 @@ public abstract class HudPanelBase : UserControl
         var delta = current - _resizeStart;
         double newWidth = Math.Max(MinWidth > 0 ? MinWidth : 120, _resizeStartSize.Width + delta.X);
         double newHeight = Math.Max(MinHeight > 0 ? MinHeight : 60, _resizeStartSize.Height + delta.Y);
+
+        // Never let a panel grow past the visible canvas — otherwise the bottom-right resize grip ends
+        // up under the taskbar / off-screen and the panel gets stuck at full size (spec: reachable grips).
+        var canvas = Parent as Canvas ?? VisualTreeHelper.GetParent(this) as Canvas;
+        if (canvas != null)
+        {
+            double left = Canvas.GetLeft(this); if (double.IsNaN(left)) left = 0;
+            double top = Canvas.GetTop(this); if (double.IsNaN(top)) top = 0;
+            double maxW = Math.Max(MinWidth > 0 ? MinWidth : 120, canvas.ActualWidth - left - 4);
+            double maxH = Math.Max(MinHeight > 0 ? MinHeight : 60, canvas.ActualHeight - top - 4);
+            newWidth = Math.Min(newWidth, maxW);
+            newHeight = Math.Min(newHeight, maxH);
+        }
+
         Width = newWidth;
         Height = newHeight;
 
