@@ -45,6 +45,9 @@ public interface IApplicationStateService
     /// <summary>Turns the ADHD support layer on or off.</summary>
     void SetAdhdMode(bool enabled);
 
+    /// <summary>Shows or hides the optional engineering-symbol palette.</summary>
+    void SetSymbolPaletteVisible(bool visible);
+
     /// <summary>Enters/exits capture mode (spec §139).</summary>
     void SetCaptureModeActive(bool active);
 }

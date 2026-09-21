@@ -122,4 +122,10 @@ public sealed class ApplicationStateService : IApplicationStateService
         Update(s => s with { AdhdMode = enabled });
         _logger.LogDebug("ADHD mode set to {Enabled}.", enabled);
     }
+
+    public void SetSymbolPaletteVisible(bool visible)
+    {
+        Update(s => s with { SymbolPaletteVisible = visible });
+        _logger.LogDebug("Symbol palette visibility set to {Visible}.", visible);
+    }
 }

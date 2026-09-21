@@ -89,15 +89,18 @@ public partial class App : Application
 
             // Restore whether the optional Cheat Sheet panel was shown, before overlays are built.
             appState.SetCheatSheetVisible(settings.CheatSheetEnabled);
-            // Restore the ADHD support layer before overlays are built.
+            // Restore the ADHD support layer and symbol palette before overlays are built.
             appState.SetAdhdMode(settings.AdhdMode);
-            // Persist later show/hide + ADHD toggles (from the control capsule) so choices survive restart.
+            appState.SetSymbolPaletteVisible(settings.SymbolPaletteEnabled);
+            // Persist later show/hide toggles (from the control capsule) so choices survive restart.
             appState.StateChanged += (_, ev) =>
             {
                 if (ev.Previous.CheatSheetVisible != ev.Current.CheatSheetVisible)
                     _ = settingsStore.UpdateAsync(s => s with { CheatSheetEnabled = ev.Current.CheatSheetVisible });
                 if (ev.Previous.AdhdMode != ev.Current.AdhdMode)
                     _ = settingsStore.UpdateAsync(s => s with { AdhdMode = ev.Current.AdhdMode });
+                if (ev.Previous.SymbolPaletteVisible != ev.Current.SymbolPaletteVisible)
+                    _ = settingsStore.UpdateAsync(s => s with { SymbolPaletteEnabled = ev.Current.SymbolPaletteVisible });
             };
 
             // Step 5: Start foreground tracking
@@ -187,6 +190,7 @@ public partial class App : Application
                 services.AddSingleton<IGlobalInputService>(sp => sp.GetRequiredService<GlobalInputService>());
                 services.AddSingleton<HoldToInteractService>();
                 services.AddSingleton<IMouseClickRecorder, MouseClickRecorder>();
+                services.AddSingleton<ITextInputService, TextInputService>();
                 services.AddSingleton<IForegroundWindowService>(sp =>
                     new ForegroundWindowService(
                         sp.GetRequiredService<ILogger<ForegroundWindowService>>(),
@@ -207,6 +211,7 @@ public partial class App : Application
                     sp.GetRequiredService<INotionPageReader>(),
                     sp.GetRequiredService<MomentumService>(),
                     sp.GetRequiredService<IForegroundWindowService>(),
+                    sp.GetRequiredService<ITextInputService>(),
                     sp.GetRequiredService<ILogger<OverlayManager>>()));
 
                 // ── Capture ──────────────────────────────────────────────────

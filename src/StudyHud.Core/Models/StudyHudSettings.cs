@@ -111,6 +111,16 @@ public record StudyHudSettings
     /// <summary>Remembered vertical scroll offset per Cheat Sheet page id, so reopening lands where you left off.</summary>
     public Dictionary<string, double> CheatSheetScroll { get; init; } = new();
 
+    // ── Symbol palette (engineering symbols HUD) ─────────────────────────────
+    /// <summary>Whether the optional engineering-symbol palette is shown on the HUD.</summary>
+    public bool SymbolPaletteEnabled { get; init; } = false;
+
+    /// <summary>Favourited symbol glyphs, pinned to the top of the palette (in this order).</summary>
+    public List<string> SymbolFavorites { get; init; } = new();
+
+    /// <summary>User-added symbols that aren't in the built-in set.</summary>
+    public List<CustomSymbol> CustomSymbols { get; init; } = new();
+
     // ── ADHD support layer ───────────────────────────────────────────────────
     /// <summary>Master switch for the ADHD support layer (extra focus panels, calmer defaults, softer copy).</summary>
     public bool AdhdMode { get; init; } = false;

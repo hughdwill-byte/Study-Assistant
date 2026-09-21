@@ -27,11 +27,13 @@ public sealed class PanelHost : Canvas
     private readonly ISettingsStore _settings;
     private readonly MomentumService _momentum;
     private readonly IForegroundWindowService _foreground;
+    private readonly ITextInputService _textInput;
 
     private readonly List<HudPanelBase> _panels = [];
     private ControlCapsule? _capsule;
     private FocusTimerPanel? _focusPanel;
     private CheatSheetPanel? _cheatPanel;
+    private SymbolPalettePanel? _symbolPanel;
     private readonly List<HudPanelBase> _adhdPanels = [];
 
     /// <summary>The monitor this host renders panels for.</summary>
@@ -48,7 +50,8 @@ public sealed class PanelHost : Canvas
         INotionPageReader notionReader,
         ISettingsStore settings,
         MomentumService momentum,
-        IForegroundWindowService foreground)
+        IForegroundWindowService foreground,
+        ITextInputService textInput)
     {
         _monitor = monitor;
         _appState = appState;
@@ -61,6 +64,7 @@ public sealed class PanelHost : Canvas
         _settings = settings;
         _momentum = momentum;
         _foreground = foreground;
+        _textInput = textInput;
 
         Background = Brushes.Transparent;
         SnapsToDevicePixels = true;
@@ -107,6 +111,12 @@ public sealed class PanelHost : Canvas
         Canvas.SetTop(_cheatPanel, 16);
         UpdateCheatPanelPresence();
 
+        // Optional engineering-symbol palette — click a symbol to type it into the focused app.
+        _symbolPanel = new SymbolPalettePanel(_appState, _theme, _textInput, _settings);
+        Canvas.SetRight(_symbolPanel, 360);
+        Canvas.SetTop(_symbolPanel, 16);
+        UpdateSymbolPanelPresence();
+
         // ── ADHD support layer ────────────────────────────────────────────────
         // Feed completed focus blocks into momentum, and apply the hyperfocus session cap.
         _pomodoro.SessionCapMinutes = _settings.Current.SessionCapMinutes;
@@ -151,6 +161,17 @@ public sealed class PanelHost : Canvas
         else if (!active && present) Children.Remove(_cheatPanel);
     }
 
+    /// <summary>Adds the symbol palette while it is enabled (or while calibrating), removes it otherwise.</summary>
+    private void UpdateSymbolPanelPresence()
+    {
+        if (_symbolPanel == null) return;
+        bool active = _appState.Current.SymbolPaletteVisible
+                      || _appState.Current.HudInteractionState == HudInteractionState.Edit;
+        bool present = Children.Contains(_symbolPanel);
+        if (active && !present) Children.Add(_symbolPanel);
+        else if (!active && present) Children.Remove(_symbolPanel);
+    }
+
     private void OnPomodoroPhaseChanged(object? sender, EventArgs e)
         => Dispatcher.BeginInvoke(UpdateFocusPanelPresence);
 
@@ -179,11 +200,16 @@ public sealed class PanelHost : Canvas
                 UpdateFocusPanelPresence();
                 UpdateCheatPanelPresence();
                 UpdateAdhdPanelsPresence();
+                UpdateSymbolPanelPresence();
             }
 
             // The control capsule toggles the optional Cheat Sheet panel on/off.
             if (e.Previous.CheatSheetVisible != e.Current.CheatSheetVisible)
                 UpdateCheatPanelPresence();
+
+            // The control capsule toggles the optional symbol palette on/off.
+            if (e.Previous.SymbolPaletteVisible != e.Current.SymbolPaletteVisible)
+                UpdateSymbolPanelPresence();
 
             // The control capsule toggles the ADHD support layer on/off.
             if (e.Previous.AdhdMode != e.Current.AdhdMode)
