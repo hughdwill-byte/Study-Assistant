@@ -28,7 +28,9 @@ public sealed class StartPanel : HudPanelBase
         _settings = settings;
         _state = appState;
         MinWidth = 240;
+        MinHeight = 190;
         Width = 300;
+        Height = 260;
     }
 
     protected override string PanelTitle => "Start";

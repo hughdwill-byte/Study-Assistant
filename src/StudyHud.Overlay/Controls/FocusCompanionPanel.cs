@@ -41,7 +41,9 @@ public sealed class FocusCompanionPanel : HudPanelBase
         _foreground = foreground;
         _settings = settings;
         MinWidth = 240;
+        MinHeight = 150;
         Width = 300;
+        Height = 210;
     }
 
     protected override string PanelTitle => "Companion";
