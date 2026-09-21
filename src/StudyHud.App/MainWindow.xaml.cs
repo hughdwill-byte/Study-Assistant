@@ -161,6 +161,14 @@ public partial class MainWindow : Window
         PageHost.Content = _focusView;
     }
 
+    private SymbolsView? _symbolsView;
+
+    private void OnShowSymbols(object sender, RoutedEventArgs e)
+    {
+        _symbolsView ??= _services.GetRequiredService<SymbolsView>();
+        PageHost.Content = _symbolsView;
+    }
+
     private void OnShowHome(object sender, RoutedEventArgs e)
     {
         PageHost.Content = HomeView;
@@ -192,7 +200,7 @@ public partial class MainWindow : Window
         }
         else
         {
-            _appState.SetHudInteractionState(HudInteractionState.Ghost);
+            _appState.ExitEditMode();
             CalibrateButton.Content = "Calibrate HUD";
             _ = _services.GetRequiredService<StudyHud.Overlay.WorkspaceCoordinator>().SaveCurrentAsync();
             _logger.LogInformation("Calibrate mode OFF — HUD layout saved.");

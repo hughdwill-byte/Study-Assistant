@@ -289,6 +289,7 @@ public partial class App : Application
                 services.AddTransient<NotesView>();
                 services.AddTransient<ThemesView>();
                 services.AddTransient<FocusView>();
+                services.AddTransient<SymbolsView>();
             })
             .Build();
     }

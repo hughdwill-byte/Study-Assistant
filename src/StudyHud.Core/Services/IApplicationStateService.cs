@@ -36,6 +36,13 @@ public interface IApplicationStateService
     /// <summary>Transitions the HUD interaction state (spec §127).</summary>
     void SetHudInteractionState(HudInteractionState newState);
 
+    /// <summary>
+    /// Explicitly leaves Edit/Calibrate mode back to Ghost. Unlike <see cref="SetHudInteractionState"/>,
+    /// this is honoured while in Edit (that method ignores Ghost/Active so a Hold-to-Interact release
+    /// can't drop out of Edit — but the Calibrate button and toggle hotkey must be able to exit).
+    /// </summary>
+    void ExitEditMode();
+
     /// <summary>Sets global HUD visibility (Panic Hide — spec §7).</summary>
     void SetHudVisible(bool visible);
 

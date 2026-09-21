@@ -100,6 +100,13 @@ public sealed class ApplicationStateService : IApplicationStateService
         Update(s => s with { HudInteractionState = newState });
     }
 
+    public void ExitEditMode()
+    {
+        if (Current.HudInteractionState != HudInteractionState.Edit) return;
+        Update(s => s with { HudInteractionState = HudInteractionState.Ghost });
+        _logger.LogInformation("Exited Edit/Calibrate mode.");
+    }
+
     public void SetHudVisible(bool visible)
     {
         Update(s => s with { HudVisible = visible });

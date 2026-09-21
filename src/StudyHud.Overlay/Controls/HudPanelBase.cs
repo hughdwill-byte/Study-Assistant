@@ -662,12 +662,36 @@ public abstract class HudPanelBase : UserControl
         if (IsInteractive(e.OriginalSource)) return; // clicks on buttons/inputs act, not drag
         _isDragging = true;
         _dragStart = e.GetPosition(null);
-        var parent = Parent as Canvas ?? VisualTreeHelper.GetParent(this) as Canvas;
-        _panelStartPos = parent != null
-            ? new Point(Canvas.GetLeft(this), Canvas.GetTop(this))
-            : new Point(0, 0);
+        _panelStartPos = NormaliseToLeftTop();
         ((UIElement)sender).CaptureMouse();
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// Ensures the panel is positioned by Canvas.Left/Top (not Right/Bottom) before a drag or resize, so
+    /// dragging actually moves it. Panels laid out with Canvas.Right stay pinned otherwise — setting
+    /// Left has no effect while Right is set. Returns the panel's current Left/Top in canvas coordinates.
+    /// </summary>
+    private Point NormaliseToLeftTop()
+    {
+        var canvas = Parent as Canvas ?? VisualTreeHelper.GetParent(this) as Canvas;
+        if (canvas == null) return new Point(0, 0);
+
+        double left = Canvas.GetLeft(this);
+        double top = Canvas.GetTop(this);
+        if (double.IsNaN(left) || double.IsNaN(top))
+        {
+            // Positioned by Right/Bottom (or not at all) — read the real arranged position instead.
+            var origin = TranslatePoint(new Point(0, 0), canvas);
+            if (double.IsNaN(left)) left = origin.X;
+            if (double.IsNaN(top)) top = origin.Y;
+        }
+
+        Canvas.SetRight(this, double.NaN);
+        Canvas.SetBottom(this, double.NaN);
+        Canvas.SetLeft(this, left);
+        Canvas.SetTop(this, top);
+        return new Point(left, top);
     }
 
     /// <summary>True if the click landed on an interactive control, so a drag should not start.</summary>
@@ -712,6 +736,7 @@ public abstract class HudPanelBase : UserControl
     private void OnResizeStart(object sender, MouseButtonEventArgs e)
     {
         _isResizing = true;
+        NormaliseToLeftTop(); // resize from the top-left corner, even for Right/Bottom-pinned panels
         _resizeStart = e.GetPosition(null);
         _resizeStartSize = new Size(ActualWidth, ActualHeight);
         ((UIElement)sender).CaptureMouse();
