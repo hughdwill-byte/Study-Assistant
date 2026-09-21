@@ -23,6 +23,7 @@ public sealed class OverlayManager : IDisposable
     private readonly INotionPageReader _notionReader;
     private readonly MomentumService _momentum;
     private readonly IForegroundWindowService _foreground;
+    private readonly ITextInputService _textInput;
     private readonly ILogger<OverlayManager> _logger;
     private readonly Dictionary<string, MonitorOverlayWindow> _overlays = new();
     private string? _activeMonitorId;
@@ -40,6 +41,7 @@ public sealed class OverlayManager : IDisposable
         INotionPageReader notionReader,
         MomentumService momentum,
         IForegroundWindowService foreground,
+        ITextInputService textInput,
         ILogger<OverlayManager> logger)
     {
         _monitors = monitors;
@@ -53,6 +55,7 @@ public sealed class OverlayManager : IDisposable
         _notionReader = notionReader;
         _momentum = momentum;
         _foreground = foreground;
+        _textInput = textInput;
         _logger = logger;
 
         _monitors.TopologyChanged += OnTopologyChanged;
@@ -129,7 +132,7 @@ public sealed class OverlayManager : IDisposable
 
         // Create a PanelHost and attach it to the overlay
         var host = new PanelHost(monitor, _appState, _theme, _capture, _finder, _policy, _pomodoro,
-            _notionReader, _settings, _momentum, _foreground);
+            _notionReader, _settings, _momentum, _foreground, _textInput);
         overlay.SetPanelHost(host);
 
         _overlays[monitor.MonitorId] = overlay;
