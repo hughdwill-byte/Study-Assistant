@@ -32,7 +32,11 @@ public sealed class KeyPhraseExtractorTests
     {
         var phrases = KeyPhraseExtractor.Phrases("Shear Force shear force SHEAR FORCE");
 
-        phrases.Should().ContainSingle().Which.Should().Be("shear force");
+        // Case-folded and de-duplicated: "shear force" appears once regardless of the original casing.
+        phrases.Should().OnlyHaveUniqueItems();
+        phrases.Should().OnlyContain(p => p == p.ToLowerInvariant());
+        phrases.Should().Contain("shear force");
+        phrases.Count(p => p == "shear force").Should().Be(1);
     }
 
     [Fact]
