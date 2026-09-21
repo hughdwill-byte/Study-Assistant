@@ -107,6 +107,18 @@ public sealed class SearchIndexTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task Search_ExactPhrase_ProducesPhraseBonusExplanation()
+    {
+        // "bending stress" appears as an adjacent phrase in the flexure note's text — the exact
+        // wording — so it should earn a phrase-bonus explanation, not just separate word matches.
+        var results = await _index.SearchAsync(Query("find the maximum bending stress"));
+
+        var flexure = results.Single(r => r.NoteItemId == "flexure");
+        flexure.Explanations.Should().Contain(
+            e => e.Type == MatchType.PhraseBonuse && e.Value == "bending stress");
+    }
+
+    [Fact]
     public async Task Search_ProducesExplanations()
     {
         var results = await _index.SearchAsync(Query("bending stress M I"));

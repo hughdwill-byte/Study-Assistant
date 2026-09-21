@@ -247,6 +247,9 @@ public partial class App : Application
                 // ── Question Finder runtime (capture → OCR → search, spec §38) ─
                 services.AddSingleton<IQuestionFinder, QuestionFinder>();
 
+                // ── Wordbank: local glossary harvested from the user's own notes (spec §54) ─
+                services.AddSingleton<IWordbank, Wordbank>();
+
                 // ── Settings + layout persistence (spec §19, §71) ────────────
                 services.AddSingleton<ISettingsStore>(sp =>
                     new JsonSettingsStore(
@@ -290,6 +293,7 @@ public partial class App : Application
                 services.AddTransient<ThemesView>();
                 services.AddTransient<FocusView>();
                 services.AddTransient<SymbolsView>();
+                services.AddTransient<WordbankView>();
             })
             .Build();
     }

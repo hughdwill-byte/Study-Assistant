@@ -78,6 +78,28 @@ public interface ISearchIndex
 
     /// <summary>Count of successfully indexed items for a course.</summary>
     Task<int> GetIndexedCountAsync(string courseId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns every successfully indexed note item's searchable text and location for a course, so the
+    /// Wordbank can harvest the user's own vocabulary from it (spec §54). Read-only, local, and
+    /// non-generative — it only reads back what was already OCR'd and indexed, never a remote or
+    /// generative service.
+    /// </summary>
+    Task<IReadOnlyList<CorpusRow>> GetCourseCorpusAsync(string courseId, CancellationToken ct = default);
+}
+
+/// <summary>One indexed note item's text + location, used to build the Wordbank glossary.</summary>
+public record CorpusRow
+{
+    public required string NoteItemId { get; init; }
+    public required string CourseId { get; init; }
+    public string? WeekLabel { get; init; }
+    public required string PageName { get; init; }
+    public string HeadingPath { get; init; } = "";
+    public string? HeadingText { get; init; }
+    public required string NotionPageUrl { get; init; }
+    public string? NotionBlockId { get; init; }
+    public required string Normalised { get; init; }
 }
 
 /// <summary>
@@ -133,6 +155,14 @@ public record ExtractedFeatures
     public required IReadOnlyList<string> Units { get; init; }
     public required IReadOnlyList<string> Expressions { get; init; }
     public required IReadOnlyList<string> Symbols { get; init; }
+
+    /// <summary>
+    /// Significant adjacent word pairs (e.g. "bending stress", "shear force") with stop words removed.
+    /// Used to match the <em>exact wording</em> of a concept rather than its individual words, so a
+    /// screenshotted question lands on the precise note. Deterministic; defaults to empty for callers
+    /// that build features without phrase detection.
+    /// </summary>
+    public IReadOnlyList<string> KeyPhrases { get; init; } = [];
 }
 
 public record SearchResult

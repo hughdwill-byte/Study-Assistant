@@ -169,6 +169,14 @@ public partial class MainWindow : Window
         PageHost.Content = _symbolsView;
     }
 
+    private WordbankView? _wordbankView;
+
+    private void OnShowWordbank(object sender, RoutedEventArgs e)
+    {
+        _wordbankView ??= _services.GetRequiredService<WordbankView>();
+        PageHost.Content = _wordbankView;
+    }
+
     private void OnShowHome(object sender, RoutedEventArgs e)
     {
         PageHost.Content = HomeView;
