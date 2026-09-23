@@ -294,6 +294,7 @@ public partial class App : Application
                 services.AddTransient<FocusView>();
                 services.AddTransient<SymbolsView>();
                 services.AddTransient<WordbankView>();
+                services.AddTransient<QuestionFinderView>();
             })
             .Build();
     }

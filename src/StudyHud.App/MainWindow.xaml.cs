@@ -177,6 +177,14 @@ public partial class MainWindow : Window
         PageHost.Content = _wordbankView;
     }
 
+    private QuestionFinderView? _questionFinderView;
+
+    private void OnShowQuestionFinder(object sender, RoutedEventArgs e)
+    {
+        _questionFinderView ??= _services.GetRequiredService<QuestionFinderView>();
+        PageHost.Content = _questionFinderView;
+    }
+
     private void OnShowHome(object sender, RoutedEventArgs e)
     {
         PageHost.Content = HomeView;

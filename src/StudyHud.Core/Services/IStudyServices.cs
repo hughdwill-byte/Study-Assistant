@@ -176,6 +176,12 @@ public record SearchResult
     public required string NotionPageUrl { get; init; }
     public required string? NotionBlockId { get; init; }
 
+    /// <summary>The Notion page id this note item belongs to, so a viewer can load and render the page.</summary>
+    public string? PageId { get; init; }
+
+    /// <summary>The heading text this item sat under, used to scroll the rendered page to the match.</summary>
+    public string? HeadingText { get; init; }
+
     /// <summary>Deterministic score 0–100. Never call this "AI confidence".</summary>
     public required double MatchScore { get; init; }
 

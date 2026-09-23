@@ -107,7 +107,8 @@ public sealed class LocalSearchIndex : ISearchIndex
                 ni.ocr_confidence,
                 ni.heading_text,
                 bm25(note_fts) AS bm25_score,
-                snippet(note_fts, 0, '[', ']', '...', 20) AS snippet
+                snippet(note_fts, 0, '[', ']', '...', 20) AS snippet,
+                ni.page_id
             FROM note_fts
             JOIN note_items ni ON ni.id = note_fts.note_item_id
             JOIN courses c ON c.id = ni.course_id
@@ -148,7 +149,8 @@ public sealed class LocalSearchIndex : ISearchIndex
                 OcrConfidence = reader.IsDBNull(8) ? 1.0f : reader.GetFloat(8),
                 HeadingText = reader.IsDBNull(9) ? null : reader.GetString(9),
                 Bm25Score = reader.GetDouble(10),
-                Snippet = reader.IsDBNull(11) ? null : reader.GetString(11)
+                Snippet = reader.IsDBNull(11) ? null : reader.GetString(11),
+                PageId = reader.IsDBNull(12) ? null : reader.GetString(12)
             });
         }
 
@@ -310,6 +312,8 @@ public sealed class LocalSearchIndex : ISearchIndex
                 HeadingPath = r.HeadingPath,
                 NotionPageUrl = r.NotionPageUrl,
                 NotionBlockId = r.NotionBlockId,
+                PageId = r.PageId,
+                HeadingText = r.HeadingText,
                 MatchScore = normalisedScore,
                 Explanations = explanations
             });
@@ -594,5 +598,6 @@ public sealed class LocalSearchIndex : ISearchIndex
         public string? HeadingText { get; init; }
         public required double Bm25Score { get; init; }
         public string? Snippet { get; init; }
+        public string? PageId { get; init; }
     }
 }
