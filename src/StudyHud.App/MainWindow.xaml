@@ -106,6 +106,7 @@
                     <Button Content="Assessment Mode" Margin="8,2"
                             Click="OnToggleAssessmentMode"/>
                     <Button Content="Themes" Margin="8,2" Click="OnShowThemes"/>
+                    <Button Content="Question Finder" Margin="8,2" Click="OnShowQuestionFinder"/>
                     <Button Content="Symbols" Margin="8,2" Click="OnShowSymbols"/>
                     <Button Content="Wordbank" Margin="8,2" Click="OnShowWordbank"/>
                     <Button Content="Settings" Margin="8,2" Click="OnShowSettings"/>

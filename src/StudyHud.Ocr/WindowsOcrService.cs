@@ -94,7 +94,11 @@ public sealed class WindowsOcrService : IOcrService
 
             var rawText = ocr.Text ?? string.Empty;
             var words = ExtractWords(ocr);
-            var normalised = OcrNormaliser.Normalise(rawText);
+            // Reconstruct a column-aware reading order from the word boxes so multi-column captures
+            // keep genuinely-adjacent words together (better key-phrase matching). Fall back to the
+            // engine's line order if there are no word boxes.
+            var orderedText = words.Count > 0 ? OcrReadingOrder.Reconstruct(words) : rawText;
+            var normalised = OcrNormaliser.Normalise(string.IsNullOrWhiteSpace(orderedText) ? rawText : orderedText);
             // Windows OCR exposes no confidence score; treat any recognised words as usable text.
             float confidence = words.Count > 0 ? 0.9f : 0f;
 
