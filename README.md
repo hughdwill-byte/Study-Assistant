@@ -4,10 +4,15 @@
 
 <h1 align="center">Study HUD</h1>
 
-A Windows desktop study assistant: an always‑on‑top, click‑through HUD overlay with configurable
-macros, one‑gesture screenshot capture, multi‑monitor layouts, and a **deterministic Question
-Finder** that searches your own locally‑indexed Notion notes — **without** generating answers or
-using any generative AI.
+A Windows desktop study assistant. Its main pieces are:
+
+- an always‑on‑top, click‑through HUD overlay
+- configurable macros and one‑gesture screenshot capture
+- multi‑monitor layouts
+- focus tools: Pomodoro, ADHD Mode and a Cheat Sheet panel
+- a **deterministic Question Finder** that searches your own locally‑indexed Notion notes
+
+It **never generates answers** and uses no generative AI.
 
 > **Status: early preview.** It runs, but it's rough and unsigned. The easiest way to use it is to
 > **download the prebuilt app** (below) — no coding required. Developers can also
@@ -132,14 +137,37 @@ Do this **before** an assessment while you have internet — afterwards search w
 
 ## Find a question in your notes
 
-1. Switch the HUD to the **Question Finder** workspace (from the settings window or the control
-   capsule).
-2. Click **Draw Question** and drag a rectangle around a question anywhere on screen.
-3. Study HUD OCRs it locally, extracts words / variables / units / symbols, and searches your index.
-4. You get the top matching note sections with **why they matched** (matched terms, variables,
-   expressions) and a **Match score** — then open the note in Notion.
+Open the **Question Finder** view (from the settings window or the control capsule). There are two
+ways to search:
 
-It **never answers the question** — it only points you to your own relevant notes.
+- **Type it**: enter key words or a key phrase in the search bar and press **Enter**.
+- **Capture it**: click **Draw Question** and drag a rectangle around a question anywhere on screen.
+  Study HUD OCRs it locally, rebuilding the reading order column by column so two-column layouts
+  still match exact phrases. It then extracts words, variables, units and symbols and searches your
+  index.
+
+You get the top matching note sections, each with **why it matched** (matched terms, variables,
+expressions) and a **Match score**. Click a result to see an **in-app preview** of the Notion page,
+scrolled to the matching heading so you can read just above and below it. You can also open the
+page in Notion.
+
+**Wordbank** builds a glossary of your *own* vocabulary from page titles, headings, note text and
+OCR'd images. Use it to look up the exact wording of a concept (e.g. "bending stress").
+
+The Question Finder **never answers the question**. It only points you to your own relevant notes.
+
+---
+
+## Optional panels & study aids
+
+All of these are off by default. Toggle them from the control capsule or the settings window.
+
+| Feature | What it does |
+|---------|--------------|
+| **Cheat Sheet panel** (▤) | Pins one Notion page to a scrollable HUD panel, keeping its formatting and images but none of Notion's chrome. |
+| **Engineering-symbol palette** (∑) | Click a symbol to insert it into whatever app you're typing in. |
+| **Focus timer** | Pomodoro timer with a goal line for each sprint, an elapsed-time badge, and rising/falling chimes when a block starts or ends. |
+| **ADHD Mode** | Adds focus support: a calm theme, a clock badge with a countdown ring, studied-today time and a day streak, a **5-minute start** panel, and a focus companion that counts distractions and nudges you to take breaks. Strength can be **Gentle**, **Standard** or **Strong**, and **Set up for ADHD** applies the recommended settings in one tap. |
 
 ---
 
